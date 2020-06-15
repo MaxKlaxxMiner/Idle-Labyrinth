@@ -78,6 +78,8 @@
   <ItemGroup />
   <ItemGroup>
     <TypeScriptCompile Include="ts\game.ts" />
+    <TypeScriptCompile Include="ts\interfaces.ts" />
+    <TypeScriptCompile Include="ts\tools.ts" />
   </ItemGroup>
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
