@@ -4,8 +4,12 @@ class Game
 {
   gameDiv: HTMLElement;
   ctx: CanvasRenderingContext2D;
-  bitmap: ImageData;
   counter: number;
+
+  bitmap: ImageData;
+  bitmapBuf: ArrayBuffer;
+  bitmapBuf8: Uint8ClampedArray;
+  bitmapData: Uint32Array;
 
   constructor(gameDiv: HTMLElement)
   {
@@ -20,19 +24,19 @@ class Game
     this.ctx = canvas.getContext("2d");
     gameDiv.appendChild(canvas);
 
-    this.bitmap = this.ctx.createImageData(canvas.width, canvas.height);
     this.counter = 0;
+
+    this.bitmap = this.ctx.createImageData(canvas.width, canvas.height);
+    this.bitmapBuf = new ArrayBuffer(this.bitmap.data.length);
+    this.bitmapBuf8 = new Uint8ClampedArray(this.bitmapBuf);
+    this.bitmapData = new Uint32Array(this.bitmapBuf);
   }
 
   test(): void
   {
     var m = performance.now();
 
-    var b = this.bitmap;
-
-    var buf = new ArrayBuffer(b.data.length);
-    var buf8 = new Uint8ClampedArray(buf);
-    var data = new Uint32Array(buf);
+    var data = this.bitmapData;
 
     var c = (performance.now() * 0.1) % 1280;
     for (var y = 0; y < 720; y++)
@@ -47,12 +51,11 @@ class Game
       }
     }
 
-    b.data.set(buf8);
+    this.bitmap.data.set(this.bitmapBuf8);
 
-    this.ctx.putImageData(b, 0, 0);
+    this.ctx.putImageData(this.bitmap, 0, 0);
     m = performance.now() - m;
     document.getElementById("time").innerText = " / f-time: " + m.toFixed(2) + " ms";
-    //console.log("time: " + m.toFixed(2) + " ms");
   }
 }
 
