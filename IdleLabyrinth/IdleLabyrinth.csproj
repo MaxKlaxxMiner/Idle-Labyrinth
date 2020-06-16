@@ -70,7 +70,9 @@
     <Content Include="css\basics.css" />
     <Content Include="favicon.ico" />
     <Content Include="index.html" />
-    <Content Include="Web.config" />
+    <Content Include="Web.config">
+      <SubType>Designer</SubType>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
