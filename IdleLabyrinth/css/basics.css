@@ -8,3 +8,8 @@ body
 {
   background: #222;
 }
+
+#game canvas
+{
+  cursor: pointer;
+}

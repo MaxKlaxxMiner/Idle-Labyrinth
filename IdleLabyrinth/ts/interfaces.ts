@@ -7,5 +7,6 @@ declare class Uint8ClampedArray
 
 interface Array<T>
 {
-  set(o: Uint8ClampedArray): void;
+  set(o: Uint8ClampedArray, offset?: number): void;
+  set(o: Uint8Array, offset?: number): void;
 }

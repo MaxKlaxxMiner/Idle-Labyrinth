@@ -4,11 +4,10 @@ class Game
 {
   gameDiv: HTMLElement;
   ctx: CanvasRenderingContext2D;
-  counter: number;
 
   bitmap: ImageData;
   bitmapBuf: ArrayBuffer;
-  bitmapBuf8: Uint8ClampedArray;
+  bitmapBuf8: Uint8Array;
   bitmapData: Uint32Array;
 
   constructor(gameDiv: HTMLElement)
@@ -24,38 +23,83 @@ class Game
     this.ctx = canvas.getContext("2d");
     gameDiv.appendChild(canvas);
 
-    this.counter = 0;
-
     this.bitmap = this.ctx.createImageData(canvas.width, canvas.height);
     this.bitmapBuf = new ArrayBuffer(this.bitmap.data.length);
-    this.bitmapBuf8 = new Uint8ClampedArray(this.bitmapBuf);
+    this.bitmapBuf8 = new Uint8Array(this.bitmapBuf);
     this.bitmapData = new Uint32Array(this.bitmapBuf);
   }
 
-  test(): void
+  bitmapScroll(x: number, y: number): void
   {
-    var m = performance.now();
-
-    var data = this.bitmapData;
-
-    var c = (performance.now() * 0.1) % 1280;
-    for (var y = 0; y < 720; y++)
+    var ofs = Math.floor((x + y * 1280) * 4);
+    if (ofs === 0) return;
+    var tmp: Uint8Array;
+    if (ofs >= 0)
     {
-      for (var x = 0; x < 1280; x++)
+      tmp = new Uint8Array(this.bitmapBuf, 0, this.bitmapBuf.byteLength - ofs);
+      this.bitmapBuf8.set(tmp, ofs);
+    }
+    else
+    {
+      tmp = new Uint8Array(this.bitmapBuf, -ofs, this.bitmapBuf.byteLength + ofs);
+      this.bitmapBuf8.set(tmp, 0);
+    }
+  }
+
+  bitmapDraw(startX: number, startY: number, width: number, height: number, c: number): void
+  {
+    var data = this.bitmapData;
+    var endX = startX + width;
+    var endY = startY + height;
+    for (var y = startY; y < endY; y++)
+    {
+      for (var x = startX; x < endX; x++)
       {
         data[x + y * 1280] =
         -16777216 |    // alpha (255 << 24)
         (Math.floor(x * 0.2 + c) << 16) |    // blue
         (Math.floor(y * 0.355) << 8) |    // green
-        50;            // red
+        80;            // red
       }
     }
+  }
+
+  lastC: number;
+
+  test(): void
+  {
+    var m = performance.now();
+
+    var c = Math.floor(m * 0.1);
+
+    if (scrollMode)
+    {
+      if (this.lastC)
+      {
+        var dif = c - this.lastC;
+        if (dif > 0)
+        {
+          dif *= 5;
+          this.bitmapScroll(-dif, 0);
+          this.bitmapDraw(1280 - dif, 0, dif, 720, c);
+        }
+      }
+      else
+      {
+        this.bitmapDraw(0, 0, 1280, 720, c);
+      }
+    }
+    else
+    {
+      this.bitmapDraw(0, 0, 1280, 720, c);
+    }
+    this.lastC = c;
 
     this.bitmap.data.set(this.bitmapBuf8);
-
     this.ctx.putImageData(this.bitmap, 0, 0);
+
     m = performance.now() - m;
-    document.getElementById("time").innerText = " / f-time: " + m.toFixed(2) + " ms";
+    document.getElementById("time").innerText = " / f-time: " + m.toFixed(2) + " ms (scroll: " + scrollMode + ")";
   }
 }
 
@@ -63,7 +107,9 @@ window.onload = () =>
 {
   var game = new Game(document.getElementById("game"));
 
-  window.setInterval(() => { game.test(); }, 1);
+  //window.setInterval(() => game.test(), 10);
 
-  //var inc = () => { game.test(); requestAnimFrame(inc) }; inc();
+  var inc = () => { requestAnimFrame(inc); game.test(); }; inc();
 };
+
+var scrollMode = true;
