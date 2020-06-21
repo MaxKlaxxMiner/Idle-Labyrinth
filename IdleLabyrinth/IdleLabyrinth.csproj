@@ -81,6 +81,7 @@
   <ItemGroup>
     <TypeScriptCompile Include="ts\game.ts" />
     <TypeScriptCompile Include="ts\interfaces.ts" />
+    <TypeScriptCompile Include="ts\laby.ts" />
     <TypeScriptCompile Include="ts\tools.ts" />
   </ItemGroup>
   <PropertyGroup>

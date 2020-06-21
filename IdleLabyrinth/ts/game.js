@@ -8,12 +8,13 @@ var Game = (function () {
         var canvas = document.createElement("canvas");
         canvas.width = 1280;
         canvas.height = 720;
-        this.ctx = canvas.getContext("2d");
+        this.ctx = canvas.getContext("2d", { alpha: false, antialias: false, depth: false });
         gameDiv.appendChild(canvas);
         this.bitmap = this.ctx.createImageData(canvas.width, canvas.height);
         this.bitmapBuf = new ArrayBuffer(this.bitmap.data.length);
         this.bitmapBuf8 = new Uint8Array(this.bitmapBuf);
         this.bitmapData = new Uint32Array(this.bitmapBuf);
+        this.laby = new Laby(1280 / 32, 720 / 32, 12345);
     }
     Game.prototype.bitmapScroll = function (x, y) {
         var ofs = Math.floor((x + y * 1280) * 4);
@@ -39,41 +40,39 @@ var Game = (function () {
             }
         }
     };
-    Game.prototype.test = function () {
+    Game.prototype.draw = function () {
         var m = performance.now();
-        var c = Math.floor(m * 0.1);
-        if (scrollMode) {
-            if (this.lastC) {
-                var dif = c - this.lastC;
-                if (dif > 0) {
-                    dif *= 5;
-                    this.bitmapScroll(-dif, 0);
-                    this.bitmapDraw(1280 - dif, 0, dif, 720, c);
+        var laby = this.laby;
+        var w = laby.pixelWidth;
+        var h = laby.pixelHeight;
+        var d = this.bitmapData;
+        var mul = 32;
+        for (var y = 0; y < h; y++) {
+            for (var x = 0; x < w; x++) {
+                var c = laby.getWall(x, y) ? 0xaaaaaa : 0x000000;
+                for (var cy = 0; cy < mul; cy++) {
+                    var p = x * mul + (y * mul + cy) * 1280;
+                    for (var cx = 0; cx < mul; cx++) {
+                        d[p + cx] = c;
+                    }
                 }
             }
-            else {
-                this.bitmapDraw(0, 0, 1280, 720, c);
-            }
         }
-        else {
-            this.bitmapDraw(0, 0, 1280, 720, c);
-        }
-        this.lastC = c;
         this.bitmap.data.set(this.bitmapBuf8);
         this.ctx.putImageData(this.bitmap, 0, 0);
         m = performance.now() - m;
-        document.getElementById("time").innerText = " / f-time: " + m.toFixed(2) + " ms (scroll: " + scrollMode + ")";
+        document.getElementById("time").innerText = " / f-time: " + m.toFixed(2) + " ms";
     };
     return Game;
 })();
 window.onload = function () {
-    var game = new Game(document.getElementById("game"));
-    //window.setInterval(() => game.test(), 10);
-    var inc = function () {
-        requestAnimFrame(inc);
-        game.test();
+    game = new Game(document.getElementById("game"));
+    //window.setInterval(() => game.draw(), 10);
+    var run = function () {
+        requestAnimFrame(run);
+        game.draw();
     };
-    inc();
+    run();
 };
-var scrollMode = true;
+var game;
 //# sourceMappingURL=game.js.map
