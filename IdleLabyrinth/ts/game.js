@@ -1,6 +1,7 @@
 /* tslint:disable:one-line max-line-length interface-name comment-format no-bitwise */
 var Game = (function () {
     function Game(gameDiv) {
+        this.lastSeed = -1;
         this.gameDiv = gameDiv;
         gameDiv.style.width = "1280px";
         gameDiv.style.height = "720px";
@@ -14,7 +15,6 @@ var Game = (function () {
         this.bitmapBuf = new ArrayBuffer(this.bitmap.data.length);
         this.bitmapBuf8 = new Uint8Array(this.bitmapBuf);
         this.bitmapData = new Uint32Array(this.bitmapBuf);
-        this.laby = new Laby(1280 / 32, 720 / 32, 12345);
     }
     Game.prototype.bitmapScroll = function (x, y) {
         var ofs = Math.floor((x + y * 1280) * 4);
@@ -42,14 +42,19 @@ var Game = (function () {
     };
     Game.prototype.draw = function () {
         var m = performance.now();
+        var mul = 4;
+        var seed = m / 1 >>> 0;
+        if (seed !== this.lastSeed) {
+            this.laby = new Laby(1280 / mul, 720 / mul, seed);
+            this.lastSeed = seed;
+        }
         var laby = this.laby;
         var w = laby.pixelWidth;
         var h = laby.pixelHeight;
         var d = this.bitmapData;
-        var mul = 32;
         for (var y = 0; y < h; y++) {
             for (var x = 0; x < w; x++) {
-                var c = laby.getWall(x, y) ? 0xaaaaaa : 0x000000;
+                var c = laby.getWall(x, y) ? 0x000000 : 0xd3d3d3;
                 for (var cy = 0; cy < mul; cy++) {
                     var p = x * mul + (y * mul + cy) * 1280;
                     for (var cx = 0; cx < mul; cx++) {

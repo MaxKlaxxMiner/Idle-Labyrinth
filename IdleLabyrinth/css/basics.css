@@ -11,5 +11,5 @@ body
 
 #game canvas
 {
-  cursor: pointer;
+  cursor: grab;
 }

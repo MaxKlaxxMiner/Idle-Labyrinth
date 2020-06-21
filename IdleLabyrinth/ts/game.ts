@@ -29,8 +29,6 @@ class Game
     this.bitmapBuf = new ArrayBuffer(this.bitmap.data.length);
     this.bitmapBuf8 = new Uint8Array(this.bitmapBuf);
     this.bitmapData = new Uint32Array(this.bitmapBuf);
-
-    this.laby = new Laby(1280 / 32, 720 / 32, 12345);
   }
 
   bitmapScroll(x: number, y: number): void
@@ -68,21 +66,31 @@ class Game
     }
   }
 
+  lastSeed = -1;
+
   draw(): void
   {
     var m = performance.now();
+
+    var mul = 4;
+
+    var seed = m / 1 >>> 0;
+    if (seed !== this.lastSeed)
+    {
+      this.laby = new Laby(1280 / mul, 720 / mul, seed);
+      this.lastSeed = seed;
+    }
 
     var laby = this.laby;
     var w = laby.pixelWidth;
     var h = laby.pixelHeight;
     var d = this.bitmapData;
 
-    var mul = 32;
     for (var y = 0; y < h; y++)
     {
       for (var x = 0; x < w; x++)
       {
-        var c = laby.getWall(x, y) ? 0xaaaaaa : 0x000000;
+        var c = laby.getWall(x, y) ? 0x000000 : 0xd3d3d3;
         for (var cy = 0; cy < mul; cy++)
         {
           var p = x * mul + (y * mul + cy) * 1280;
