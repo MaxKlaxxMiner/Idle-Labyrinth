@@ -1,7 +1,6 @@
 /* tslint:disable:one-line max-line-length interface-name comment-format no-bitwise */
 var Game = (function () {
     function Game(gameDiv) {
-        this.lastSeed = -1;
         this.gameDiv = gameDiv;
         gameDiv.style.width = "1280px";
         gameDiv.style.height = "720px";
@@ -40,29 +39,31 @@ var Game = (function () {
             }
         }
     };
-    Game.prototype.draw = function () {
-        var m = performance.now();
-        var mul = 4;
-        var seed = m / 1 >>> 0;
-        if (seed !== this.lastSeed) {
-            this.laby = new Laby(1280 / mul, 720 / mul, seed);
-            this.lastSeed = seed;
-        }
+    Game.prototype.drawLabyRect = function (pixX, pixY, width, height, zoom) {
         var laby = this.laby;
-        var w = laby.pixelWidth;
-        var h = laby.pixelHeight;
         var d = this.bitmapData;
-        for (var y = 0; y < h; y++) {
-            for (var x = 0; x < w; x++) {
+        var startX = 0;
+        var endX = Math.floor(1280 / zoom);
+        var startY = 0;
+        var endY = Math.floor(720 / zoom);
+        for (var y = startY; y < endY; y++) {
+            for (var x = startX; x < endX; x++) {
                 var c = laby.getWall(x, y) ? 0x000000 : 0xd3d3d3;
-                for (var cy = 0; cy < mul; cy++) {
-                    var p = x * mul + (y * mul + cy) * 1280;
-                    for (var cx = 0; cx < mul; cx++) {
-                        d[p + cx] = c;
+                var line = x * zoom + (y * zoom) * 1280;
+                for (var cy = 0; cy < zoom; cy++) {
+                    for (var cx = 0; cx < zoom; cx++) {
+                        d[line + cx] = c;
                     }
+                    line += 1280;
                 }
             }
         }
+    };
+    Game.prototype.draw = function () {
+        var m = performance.now();
+        if (!this.laby)
+            this.laby = new Laby(1000, 1000, 1234567890);
+        this.drawLabyRect(0, 0, 1280, 720, 10);
         this.bitmap.data.set(this.bitmapBuf8);
         this.ctx.putImageData(this.bitmap, 0, 0);
         m = performance.now() - m;
