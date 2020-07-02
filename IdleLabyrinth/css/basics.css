@@ -9,7 +9,7 @@ body
   background: #222;
 }
 
-#game canvas
+#game
 {
   cursor: grab;
 }

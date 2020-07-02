@@ -11,6 +11,9 @@ class Game
   bitmapData: Uint32Array;
 
   laby: Laby;
+  labyOfsX: number;
+  labyOfsY: number;
+  labyZoom: number;
 
   constructor(gameDiv: HTMLElement)
   {
@@ -70,17 +73,21 @@ class Game
   {
     var laby = this.laby;
     var d = this.bitmapData;
-    var startX = 0;
-    var endX = Math.floor(1280 / zoom);
-    var startY = 0;
-    var endY = Math.floor(720 / zoom);
+    for (var i = 0; i < d.length; i++) d[i] = 0xffff8000; // background
+
+    var startX = Math.max(Math.floor((zoom - this.labyOfsX - 1) / zoom), 1);
+    var endX = Math.min(Math.floor((1280 - this.labyOfsX) / zoom), laby.pixelWidth - 1);
+    var startY = Math.max(Math.floor((zoom - this.labyOfsY - 1) / zoom), 1);
+    var endY = Math.min(Math.floor((720 - this.labyOfsY) / zoom), laby.pixelHeight - 1);
+
+    // blue border 0xb80000
 
     for (var y = startY; y < endY; y++)
     {
       for (var x = startX; x < endX; x++)
       {
-        var c = laby.getWall(x, y) ? 0x000000 : 0xd3d3d3;
-        var line = x * zoom + (y * zoom) * 1280;
+        var c = laby.getWall(x, y) ? 0xff000000 : 0xffd3d3d3;
+        var line = x * zoom + this.labyOfsX + (y * zoom + this.labyOfsY) * 1280;
         for (var cy = 0; cy < zoom; cy++)
         {
           for (var cx = 0; cx < zoom; cx++)
@@ -93,13 +100,52 @@ class Game
     }
   }
 
+  zoomLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80];
+
+  zoomOut(): void
+  {
+    this.labyZoom--;
+    if (this.labyZoom < 0)
+    {
+      this.labyZoom = 0;
+      return;
+    }
+  }
+
+  zoomIn(): void
+  {
+    this.labyZoom++;
+    if (this.labyZoom >= this.zoomLevels.length)
+    {
+      this.labyZoom = this.zoomLevels.length - 1;
+      return;
+    }
+  }
+
   draw(): void
   {
     var m = performance.now();
 
-    if (!this.laby) this.laby = new Laby(1000, 1000, 1234567890);
+    if (!this.laby)
+    {
+      if (this.labyZoom) return;
+      this.labyOfsX = -27;
+      this.labyOfsY = -27;
+      this.labyZoom = 10;
 
-    this.drawLabyRect(0, 0, 1280, 720, 10);
+      var width = 1920 * 2;  // 4k
+      var height = 1080 * 2;
+      document.getElementById("time").innerHTML = " / <span style=color:#fe0>gen: " + width + " x " + height + " ...</span>";
+      setTimeout(() => { this.laby = new Laby(width, height, 1234567890); }, 50);
+      return;
+    }
+
+    if (keys[65]) { this.labyOfsX -= 33; keys[65] = false; } // A
+    if (keys[68]) { this.labyOfsX += 33; keys[68] = false; } // D
+    if (keys[87]) { this.labyOfsY -= 33; keys[87] = false; } // W
+    if (keys[83]) { this.labyOfsY += 33; keys[83] = false; } // S
+
+    this.drawLabyRect(0, 0, 1280, 720, this.zoomLevels[this.labyZoom]);
 
     this.bitmap.data.set(this.bitmapBuf8);
     this.ctx.putImageData(this.bitmap, 0, 0);
@@ -109,13 +155,62 @@ class Game
   }
 }
 
+var keys = {};
+var game: Game;
+
 window.onload = () =>
 {
-  game = new Game(document.getElementById("game"));
+  document.body.onkeydown = (e: KeyboardEvent) =>
+  {
+    console.log("key pressed: " + e.keyCode);
+    keys[e.keyCode] = true;
+  };
+  document.body.onkeyup = (e: KeyboardEvent) =>
+  {
+    keys[e.keyCode] = false;
+  };
+
+  var div = document.getElementById("game");
+  var mouseX = 0;
+  var mouseY = 0;
+  var mouseSpeed = 3;
+
+  div.onmousedown = (m: MouseEvent) =>
+  {
+    mouseX = m.x;
+    mouseY = m.y;
+    if (m.buttons & 1)
+    {
+      div.style.cursor = "grabbing";
+    }
+  };
+
+  div.onmousewheel = (m: MouseWheelEvent) =>
+  {
+    if (m.wheelDelta < 0) game.zoomOut(); else game.zoomIn();
+  };
+
+  var moveEvent = (m: MouseEvent) =>
+  {
+    if ((m.buttons & 1) && div.style.cursor === "grabbing")
+    {
+      game.labyOfsX += (m.x - mouseX) * mouseSpeed;
+      game.labyOfsY += (m.y - mouseY) * mouseSpeed;
+    }
+    else
+    {
+      if (div.style.cursor !== "grab") div.style.cursor = "grab";
+    }
+    mouseX = m.x;
+    mouseY = m.y;
+  };
+
+  document.onmousemove = moveEvent;
+  document.onmouseup = moveEvent;
+
+  game = new Game(div);
 
   //window.setInterval(() => game.draw(), 10);
 
   var run = () => { requestAnimFrame(run); game.draw(); }; run();
 };
-
-var game: Game;
