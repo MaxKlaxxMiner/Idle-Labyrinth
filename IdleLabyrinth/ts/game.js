@@ -1,23 +1,27 @@
 /* tslint:disable:one-line max-line-length interface-name comment-format no-bitwise */
 var Game = (function () {
-    function Game(gameDiv) {
+    function Game(gameDiv, canvasWidth, canvasHeight) {
+        if (canvasWidth === void 0) { canvasWidth = 1280; }
+        if (canvasHeight === void 0) { canvasHeight = 720; }
         this.zoomLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80];
         this.gameDiv = gameDiv;
-        gameDiv.style.width = "1280px";
-        gameDiv.style.height = "720px";
+        gameDiv.style.width = canvasWidth + "px";
+        gameDiv.style.height = canvasHeight + "px";
         gameDiv.style.backgroundColor = "#036";
         var canvas = document.createElement("canvas");
-        canvas.width = 1280;
-        canvas.height = 720;
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
         this.ctx = canvas.getContext("2d", { alpha: false, antialias: false, depth: false });
         gameDiv.appendChild(canvas);
         this.bitmap = this.ctx.createImageData(canvas.width, canvas.height);
         this.bitmapBuf = new ArrayBuffer(this.bitmap.data.length);
         this.bitmapBuf8 = new Uint8Array(this.bitmapBuf);
         this.bitmapData = new Uint32Array(this.bitmapBuf);
+        this.bitmapWidth = canvasWidth;
+        this.bitmapHeight = canvasHeight;
     }
     Game.prototype.bitmapScroll = function (x, y) {
-        var ofs = Math.floor((x + y * 1280) * 4);
+        var ofs = Math.floor((x + y * this.bitmapWidth) * 4);
         if (ofs === 0)
             return;
         var tmp;
@@ -30,36 +34,65 @@ var Game = (function () {
             this.bitmapBuf8.set(tmp, 0);
         }
     };
-    Game.prototype.bitmapDraw = function (startX, startY, width, height, c) {
-        var data = this.bitmapData;
-        var endX = startX + width;
-        var endY = startY + height;
-        for (var y = startY; y < endY; y++) {
-            for (var x = startX; x < endX; x++) {
-                data[x + y * 1280] = -16777216 | (Math.floor(x * 0.2 + c) << 16) | (Math.floor(y * 0.355) << 8) | 80; // red
+    Game.getLabyColor = function (laby, x, y) {
+        if (laby.getWall(x, y)) {
+            if (x === 0 || y === 0 || x === laby.pixelWidth - 1 || y === laby.pixelHeight - 1) {
+                return 0xffb80000; // border
+            }
+            return 0xff000000; // wall
+        }
+        else {
+            return 0xffd3d3d3; // way
+        }
+    };
+    Game.prototype.drawFastPixels = function (labyX, labyY, zoom) {
+        var d = this.bitmapData;
+        var color = Game.getLabyColor(this.laby, labyX, labyY);
+        var line = labyX * zoom + this.labyOfsX + (labyY * zoom + this.labyOfsY) * this.bitmapWidth;
+        for (var cy = 0; cy < zoom; cy++) {
+            for (var cx = 0; cx < zoom; cx++) {
+                d[line + cx] = color;
+            }
+            line += this.bitmapWidth;
+        }
+    };
+    Game.prototype.drawSafePixels = function (labyX, labyY, zoom) {
+        var d = this.bitmapData;
+        var color = Game.getLabyColor(this.laby, labyX, labyY);
+        for (var cy = 0; cy < zoom; cy++) {
+            var py = labyY * zoom + this.labyOfsY + cy;
+            if (py < 0 || py >= this.bitmapHeight)
+                continue;
+            for (var cx = 0; cx < zoom; cx++) {
+                var px = labyX * zoom + this.labyOfsX + cx;
+                if (px < 0 || px >= this.bitmapWidth)
+                    continue;
+                d[py * this.bitmapWidth + px] = color;
             }
         }
     };
-    Game.prototype.drawLabyRect = function (pixX, pixY, width, height, zoom) {
+    Game.prototype.drawLabyRect = function (zoom) {
         var laby = this.laby;
         var d = this.bitmapData;
         for (var i = 0; i < d.length; i++)
-            d[i] = 0xffff8000;
+            d[i] = 0xff777777;
+        var x, y;
         var startX = Math.max(Math.floor((zoom - this.labyOfsX - 1) / zoom), 1);
-        var endX = Math.min(Math.floor((1280 - this.labyOfsX) / zoom), laby.pixelWidth - 1);
+        var endX = Math.min(Math.floor((this.bitmapWidth - this.labyOfsX) / zoom), laby.pixelWidth - 1);
         var startY = Math.max(Math.floor((zoom - this.labyOfsY - 1) / zoom), 1);
-        var endY = Math.min(Math.floor((720 - this.labyOfsY) / zoom), laby.pixelHeight - 1);
-        for (var y = startY; y < endY; y++) {
-            for (var x = startX; x < endX; x++) {
-                var c = laby.getWall(x, y) ? 0xff000000 : 0xffd3d3d3;
-                var line = x * zoom + this.labyOfsX + (y * zoom + this.labyOfsY) * 1280;
-                for (var cy = 0; cy < zoom; cy++) {
-                    for (var cx = 0; cx < zoom; cx++) {
-                        d[line + cx] = c;
-                    }
-                    line += 1280;
-                }
+        var endY = Math.min(Math.floor((this.bitmapHeight - this.labyOfsY) / zoom), laby.pixelHeight - 1);
+        for (y = startY; y < endY; y++) {
+            for (x = startX; x < endX; x++) {
+                this.drawFastPixels(x, y, zoom);
             }
+        }
+        for (x = startX - 1; x <= endX; x++) {
+            this.drawSafePixels(x, startY - 1, zoom); // top
+            this.drawSafePixels(x, endY, zoom); // bottom
+        }
+        for (y = startY; y < endY; y++) {
+            this.drawSafePixels(startX - 1, y, zoom); // left
+            this.drawSafePixels(endX, y, zoom); // right
         }
     };
     Game.prototype.zoomOut = function () {
@@ -109,7 +142,7 @@ var Game = (function () {
             this.labyOfsY += 33;
             keys[83] = false;
         } // S
-        this.drawLabyRect(0, 0, 1280, 720, this.zoomLevels[this.labyZoom]);
+        this.drawLabyRect(this.zoomLevels[this.labyZoom]);
         this.bitmap.data.set(this.bitmapBuf8);
         this.ctx.putImageData(this.bitmap, 0, 0);
         m = performance.now() - m;
@@ -130,7 +163,7 @@ window.onload = function () {
     var div = document.getElementById("game");
     var mouseX = 0;
     var mouseY = 0;
-    var mouseSpeed = 3;
+    var mouseSpeed = 1;
     div.onmousedown = function (m) {
         mouseX = m.x;
         mouseY = m.y;
@@ -158,8 +191,9 @@ window.onload = function () {
     };
     document.onmousemove = moveEvent;
     document.onmouseup = moveEvent;
-    game = new Game(div);
-    //window.setInterval(() => game.draw(), 10);
+    var docSize = getDocumentSize();
+    game = new Game(div, docSize.width - 20, docSize.height - 20 - 10 - 32 - 32 - 10);
+    //window.setInterval(() => game.draw(), 1);
     var run = function () {
         requestAnimFrame(run);
         game.draw();
