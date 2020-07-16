@@ -1,8 +1,8 @@
 /* tslint:disable:one-line max-line-length interface-name comment-format no-bitwise */
-var Laby = (function () {
-    function Laby(pixelWidth, pixelHeight, seed) {
-        var w = this.fieldWidth = Math.max(2, (pixelWidth - 1) >>> 1) + 1;
-        var h = this.fieldHeight = Math.max(2, (pixelHeight - 1) >>> 1) + 1;
+class Laby {
+    constructor(pixelWidth, pixelHeight, seed) {
+        const w = this.fieldWidth = Math.max(2, (pixelWidth - 1) >>> 1) + 1;
+        const h = this.fieldHeight = Math.max(2, (pixelHeight - 1) >>> 1) + 1;
         this.pixelWidth = w * 2 - 1;
         this.pixelHeight = h * 2 - 1;
         this.field = new Uint32Array(w * h);
@@ -10,29 +10,29 @@ var Laby = (function () {
         this.fillBaseWalls();
         this.fillRandomWalls(seed);
     }
-    Laby.prototype.fillBaseWalls = function () {
-        var f = this.field;
-        var fw = this.fieldWidth;
-        var w = fw - 1;
-        var h = this.fieldHeight - 1;
-        for (var y = 0; y <= h; y++) {
-            for (var x = 0; x <= w; x++) {
-                var top = (x === 0 || x === w) && y > 0;
-                var left = (y === 0 || y === h) && x > 0;
-                var num = top || left ? 0 : x + y * w;
+    fillBaseWalls() {
+        const f = this.field;
+        const fw = this.fieldWidth;
+        const w = fw - 1;
+        const h = this.fieldHeight - 1;
+        for (let y = 0; y <= h; y++) {
+            for (let x = 0; x <= w; x++) {
+                const top = (x === 0 || x === w) && y > 0;
+                const left = (y === 0 || y === h) && x > 0;
+                const num = top || left ? 0 : x + y * w;
                 f[x + y * fw] = (num << 2) | (top ? 1 : 0) | (left ? 2 : 0);
             }
         }
-    };
-    Laby.prototype.getRemainList = function () {
-        var r = [];
-        var f = this.field;
-        var w = this.fieldWidth;
-        var h = this.fieldHeight;
-        for (var y = 1; y < h; y++) {
-            for (var x = 1; x < w; x++) {
-                var p = x + y * w;
-                var n = f[p];
+    }
+    getRemainList() {
+        const r = [];
+        const f = this.field;
+        const w = this.fieldWidth;
+        const h = this.fieldHeight;
+        for (let y = 1; y < h; y++) {
+            for (let x = 1; x < w; x++) {
+                const p = x + y * w;
+                const n = f[p];
                 if ((n & 1) === 0 && f[p - w] >>> 2 !== n >>> 2)
                     r.push(p);
                 if ((n & 2) === 0 && f[p - 1] >>> 2 !== n >>> 2)
@@ -40,14 +40,14 @@ var Laby = (function () {
             }
         }
         return r;
-    };
-    Laby.prototype.fillWallChain = function (p, n) {
-        var f = this.field;
-        var posList = [];
-        var nextList = [];
+    }
+    fillWallChain(p, n) {
+        const f = this.field;
+        let posList = [];
+        let nextList = [];
         posList.push(p);
         while (posList.length > 0) {
-            for (var i = 0; i < posList.length; i++) {
+            for (let i = 0; i < posList.length; i++) {
                 p = posList[i];
                 if (p < 0 || p >= f.length)
                     console.log("error: " + p);
@@ -66,13 +66,13 @@ var Laby = (function () {
             posList = nextList;
             nextList = [];
         }
-    };
-    Laby.prototype.fillRandomWalls = function (rnd) {
-        var f = this.field;
-        var fw = this.fieldWidth;
-        var remainList = this.getRemainList();
-        var remainTicks = remainList.length;
-        var remainLimit = (remainTicks + 1) >>> 2;
+    }
+    fillRandomWalls(rnd) {
+        const f = this.field;
+        const fw = this.fieldWidth;
+        let remainList = this.getRemainList();
+        let remainTicks = remainList.length;
+        let remainLimit = (remainTicks + 1) >>> 2;
         while (remainTicks > 0) {
             remainTicks--;
             if (remainTicks < remainLimit) {
@@ -81,12 +81,12 @@ var Laby = (function () {
                 remainLimit = (remainTicks + 1) >>> 2;
             }
             rnd = (rnd * 214013 + 2531011) >>> 0;
-            var next = remainList[(rnd >>> 8) % remainList.length];
-            var n1, n2;
-            if (next < 0) {
+            let next = remainList[(rnd >>> 8) % remainList.length];
+            if (next < 0) // --- horizontal ---
+             {
                 next = -next;
-                n1 = f[next] >>> 2;
-                n2 = f[next - 1] >>> 2;
+                const n1 = f[next] >>> 2;
+                const n2 = f[next - 1] >>> 2;
                 if (n1 === n2 || (f[next] & 2) === 2)
                     continue; // wall already set
                 f[next] |= 2; // set horizontal wall
@@ -95,9 +95,10 @@ var Laby = (function () {
                 else
                     this.fillWallChain(next, n2);
             }
-            else {
-                n1 = f[next] >>> 2;
-                n2 = f[next - fw] >>> 2;
+            else // --- vertical ---
+             {
+                const n1 = f[next] >>> 2;
+                const n2 = f[next - fw] >>> 2;
                 if (n1 === n2 || (f[next] & 1) === 1)
                     continue; // wall already set
                 f[next] |= 1; // set vertical wall
@@ -107,17 +108,16 @@ var Laby = (function () {
                     this.fillWallChain(next, n2); // angrenzende Wand auffüllen
             }
         }
-    };
-    Laby.prototype.getWall = function (x, y) {
+    }
+    getWall(x, y) {
         if (x < 0 || y < 0 || x >= this.pixelWidth || y >= this.pixelHeight)
             return false;
         if ((x & 1) + (y & 1) === 0)
             return true;
         if ((x & 1) + (y & 1) === 2)
             return false;
-        var node = this.field[((x + 1) >>> 1) + ((y + 1) >>> 1) * this.fieldWidth];
+        const node = this.field[((x + 1) >>> 1) + ((y + 1) >>> 1) * this.fieldWidth];
         return (x & 1) === 0 ? (node & 1) === 1 : (node & 2) === 2;
-    };
-    return Laby;
-})();
+    }
+}
 //# sourceMappingURL=laby.js.map

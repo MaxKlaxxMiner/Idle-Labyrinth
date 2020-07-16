@@ -24,10 +24,10 @@ class Game
     gameDiv.style.height = canvasHeight + "px";
     gameDiv.style.backgroundColor = "#036";
 
-    var canvas = document.createElement("canvas");
+    const canvas = document.createElement("canvas");
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
-    this.ctx = canvas.getContext("2d", { alpha: false, antialias: false, depth: false });
+    this.ctx = canvas.getContext("2d");
     gameDiv.appendChild(canvas);
 
     this.bitmap = this.ctx.createImageData(canvas.width, canvas.height);
@@ -40,9 +40,9 @@ class Game
 
   bitmapScroll(x: number, y: number): void
   {
-    var ofs = Math.floor((x + y * this.bitmapWidth) * 4);
+    const ofs = Math.floor((x + y * this.bitmapWidth) * 4);
     if (ofs === 0) return;
-    var tmp: Uint8Array;
+    let tmp: Uint8Array;
     if (ofs >= 0)
     {
       tmp = new Uint8Array(this.bitmapBuf, 0, this.bitmapBuf.byteLength - ofs);
@@ -73,12 +73,12 @@ class Game
 
   drawFastPixels(labyX: number, labyY: number, zoom: number): void
   {
-    var d = this.bitmapData;
-    var color = Game.getLabyColor(this.laby, labyX, labyY);
-    var line = labyX * zoom + this.labyOfsX + (labyY * zoom + this.labyOfsY) * this.bitmapWidth;
-    for (var cy = 0; cy < zoom; cy++)
+    const d = this.bitmapData;
+    const color = Game.getLabyColor(this.laby, labyX, labyY);
+    let line = labyX * zoom + this.labyOfsX + (labyY * zoom + this.labyOfsY) * this.bitmapWidth;
+    for (let cy = 0; cy < zoom; cy++)
     {
-      for (var cx = 0; cx < zoom; cx++)
+      for (let cx = 0; cx < zoom; cx++)
       {
         d[line + cx] = color;
       }
@@ -88,15 +88,15 @@ class Game
 
   drawSafePixels(labyX: number, labyY: number, zoom: number): void
   {
-    var d = this.bitmapData;
-    var color = Game.getLabyColor(this.laby, labyX, labyY);
-    for (var cy = 0; cy < zoom; cy++)
+    const d = this.bitmapData;
+    const color = Game.getLabyColor(this.laby, labyX, labyY);
+    for (let cy = 0; cy < zoom; cy++)
     {
-      var py = labyY * zoom + this.labyOfsY + cy;
+      const py = labyY * zoom + this.labyOfsY + cy;
       if (py < 0 || py >= this.bitmapHeight) continue;
-      for (var cx = 0; cx < zoom; cx++)
+      for (let cx = 0; cx < zoom; cx++)
       {
-        var px = labyX * zoom + this.labyOfsX + cx;
+        const px = labyX * zoom + this.labyOfsX + cx;
         if (px < 0 || px >= this.bitmapWidth) continue;
         d[py * this.bitmapWidth + px] = color;
       }
@@ -105,41 +105,40 @@ class Game
 
   drawLabyRect(zoom: number): void
   {
-    var laby = this.laby;
-    var d = this.bitmapData;
-    for (var i = 0; i < d.length; i++) d[i] = 0xff777777; // background
+    const laby = this.laby;
+    const d = this.bitmapData;
+    for (let i = 0; i < d.length; i++) d[i] = 0xff777777; // background
 
-    var x: number, y: number;
-    var startX = Math.max(Math.floor((zoom - this.labyOfsX - 1) / zoom), 1);
-    var endX = Math.min(Math.floor((this.bitmapWidth - this.labyOfsX) / zoom), laby.pixelWidth - 1);
-    var startY = Math.max(Math.floor((zoom - this.labyOfsY - 1) / zoom), 1);
-    var endY = Math.min(Math.floor((this.bitmapHeight - this.labyOfsY) / zoom), laby.pixelHeight - 1);
+    const startX = Math.max(Math.floor((zoom - this.labyOfsX - 1) / zoom), 1);
+    const endX = Math.min(Math.floor((this.bitmapWidth - this.labyOfsX) / zoom), laby.pixelWidth - 1);
+    const startY = Math.max(Math.floor((zoom - this.labyOfsY - 1) / zoom), 1);
+    const endY = Math.min(Math.floor((this.bitmapHeight - this.labyOfsY) / zoom), laby.pixelHeight - 1);
 
     // --- fast fill ---
-    for (y = startY; y < endY; y++)
+    for (let y = startY; y < endY; y++)
     {
-      for (x = startX; x < endX; x++)
+      for (let x = startX; x < endX; x++)
       {
         this.drawFastPixels(x, y, zoom);
       }
     }
 
     // --- horizontal border ---
-    for (x = startX - 1; x <= endX; x++)
+    for (let x = startX - 1; x <= endX; x++)
     {
       this.drawSafePixels(x, startY - 1, zoom); // top
       this.drawSafePixels(x, endY, zoom);       // bottom
     }
 
     // --- vertical border ---
-    for (y = startY; y < endY; y++)
+    for (let y = startY; y < endY; y++)
     {
       this.drawSafePixels(startX - 1, y, zoom); // left
       this.drawSafePixels(endX, y, zoom);       // right
     }
   }
 
-  zoomLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80];
+  zoomLevels = [1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 16, 19, 22, 26, 30, 36, 42, 49, 57, 67, 79, 93, 109, 128, 151, 178, 209];
 
   zoomOut(): void
   {
@@ -163,14 +162,14 @@ class Game
 
   draw(): void
   {
-    var m = performance.now();
+    let m = performance.now();
 
     if (!this.laby)
     {
       if (this.labyZoom) return;
-      this.labyOfsX = -27;
-      this.labyOfsY = -27;
-      this.labyZoom = 10;
+      this.labyOfsX = 0;
+      this.labyOfsY = 0;
+      this.labyZoom = 16;
 
       var width = 1920 * 2;  // 4k
       var height = 1080 * 2;
@@ -224,9 +223,9 @@ window.onload = () =>
     }
   };
 
-  div.onmousewheel = (m: MouseWheelEvent) =>
+  window.onmousewheel = (m: MouseWheelEvent) =>
   {
-    if (m.wheelDelta < 0) game.zoomOut(); else game.zoomIn();
+    if (m.deltaY > 0) game.zoomOut(); else game.zoomIn();
   };
 
   var moveEvent = (m: MouseEvent) =>
