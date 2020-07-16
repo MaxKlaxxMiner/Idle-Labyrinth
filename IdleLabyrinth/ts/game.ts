@@ -1,16 +1,18 @@
 ﻿/* tslint:disable:one-line max-line-length interface-name comment-format no-bitwise */
 
+/// <reference path="laby.ts" />
+
 class Game
 {
-  gameDiv: HTMLElement;
-  ctx: CanvasRenderingContext2D;
+  readonly gameDiv: HTMLElement;
+  readonly ctx: CanvasRenderingContext2D;
 
-  bitmap: ImageData;
-  bitmapBuf: ArrayBuffer;
-  bitmapBuf8: Uint8Array;
-  bitmapData: Uint32Array;
-  bitmapWidth: number;
-  bitmapHeight: number;
+  readonly bitmap: ImageData;
+  readonly bitmapBuf: ArrayBuffer;
+  readonly bitmapBuf8: Uint8Array;
+  readonly bitmapData: Uint32Array;
+  readonly bitmapWidth: number;
+  readonly bitmapHeight: number;
 
   laby: Laby;
   labyOfsX: number;

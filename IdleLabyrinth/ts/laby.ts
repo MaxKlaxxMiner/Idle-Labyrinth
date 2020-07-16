@@ -1,5 +1,7 @@
 ﻿/* tslint:disable:one-line max-line-length interface-name comment-format no-bitwise */
 
+/// <reference path="tools.ts" />
+
 class Laby
 {
   private readonly fieldWidth: number;

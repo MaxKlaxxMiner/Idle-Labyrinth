@@ -1,0 +1,15 @@
+[
+  {
+    "outputFileName": "ts/bundle.min.js",
+    "inputFiles":
+    [
+      "ts/bundle.js"
+    ],
+    "minify":
+    {
+      "enabled": true,
+      "renameLocals": true
+    },
+    "sourceMap": true
+  }
+]
