@@ -6,3 +6,5 @@ obj
 *.user
 *.map
 
+/node_modules
+*.min.js

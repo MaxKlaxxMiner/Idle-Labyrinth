@@ -9,17 +9,14 @@ class Laby
   private readonly field: Uint32Array;
   readonly pixelWidth: number;
   readonly pixelHeight: number;
-  readonly seed: number;
 
   constructor(pixelWidth: number, pixelHeight: number, seed: number)
   {
-    const w = this.fieldWidth = Math.max(2,(pixelWidth - 1) >>> 1) + 1;
-    const h = this.fieldHeight = Math.max(2,(pixelHeight - 1) >>> 1) + 1;
+    const w = this.fieldWidth = Math.max(2, (pixelWidth - 1) >>> 1) + 1;
+    const h = this.fieldHeight = Math.max(2, (pixelHeight - 1) >>> 1) + 1;
     this.pixelWidth = w * 2 - 1;
     this.pixelHeight = h * 2 - 1;
     this.field = new Uint32Array(w * h);
-    this.seed = seed;
-
     this.fillBaseWalls();
     this.fillRandomWalls(seed);
   }

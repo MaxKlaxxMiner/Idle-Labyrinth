@@ -36,7 +36,7 @@
     <TypeScriptJSXEmit>React</TypeScriptJSXEmit>
     <TypeScriptModuleKind>None</TypeScriptModuleKind>
     <TypeScriptCompileOnSaveEnabled>True</TypeScriptCompileOnSaveEnabled>
-    <TypeScriptNoImplicitAny>False</TypeScriptNoImplicitAny>
+    <TypeScriptNoImplicitAny>True</TypeScriptNoImplicitAny>
     <TypeScriptRemoveComments>False</TypeScriptRemoveComments>
     <TypeScriptOutFile>ts/bundle.js</TypeScriptOutFile>
     <TypeScriptOutDir />
@@ -75,6 +75,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="bundleconfig.json" />
+    <Content Include="ts\bundle.js.map">
+      <DependentUpon>bundle.js</DependentUpon>
+    </Content>
     <None Include="Web.Debug.config">
       <DependentUpon>Web.config</DependentUpon>
     </None>
@@ -86,6 +89,7 @@
     <Content Include="css\basics.css" />
     <Content Include="favicon.ico" />
     <Content Include="index.html" />
+    <Content Include="ts\bundle.js" />
     <Content Include="Web.config">
       <SubType>Designer</SubType>
     </Content>

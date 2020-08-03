@@ -1,6 +1,6 @@
 ﻿/* tslint:disable:one-line max-line-length interface-name comment-format */
 
-var requestAnimFrame = (() => (window.requestAnimationFrame || (<any>window).webkitRequestAnimationFrame || (<any>window).mozRequestAnimationFrame || (cb => window.setTimeout(cb, 1000 / 60) )))();
+var requestAnimFrame = (() => (window.requestAnimationFrame || (<any>window).webkitRequestAnimationFrame || (<any>window).mozRequestAnimationFrame || ((cb: TimerHandler) => window.setTimeout(cb, 1000 / 60)))) ();
 
 interface DocumentSize
 {

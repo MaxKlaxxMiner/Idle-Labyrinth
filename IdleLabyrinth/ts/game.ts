@@ -38,6 +38,10 @@ class Game
     this.bitmapData = new Uint32Array(this.bitmapBuf);
     this.bitmapWidth = canvasWidth;
     this.bitmapHeight = canvasHeight;
+
+    this.labyOfsX = 0;
+    this.labyOfsY = 0;
+    this.labyZoom = 0;
   }
 
   bitmapScroll(x: number, y: number): void
@@ -169,10 +173,7 @@ class Game
     if (!this.laby)
     {
       if (this.labyZoom) return;
-      this.labyOfsX = 0;
-      this.labyOfsY = 0;
       this.labyZoom = 16;
-
       var width = 1920 * 2;  // 4k
       var height = 1080 * 2;
       document.getElementById("time").innerHTML = " / <span style=color:#fe0>gen: " + width + " x " + height + " ...</span>";
@@ -195,7 +196,7 @@ class Game
   }
 }
 
-var keys = {};
+var keys: { [key: string]: boolean; } = {};
 var game: Game;
 
 window.onload = () =>

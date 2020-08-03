@@ -8,8 +8,11 @@
     "minify":
     {
       "enabled": true,
-      "renameLocals": true
-    },
-    "sourceMap": true
+      "renameLocals": true,
+      "termSemicolons": false,
+      "preserveImportantComments": false,
+      "alwaysEscapeNonAscii": false,
+      "evalTreatment": "ignore"
+    }
   }
 ]
