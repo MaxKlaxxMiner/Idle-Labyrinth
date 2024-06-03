@@ -8,3 +8,4 @@ obj
 
 /node_modules
 *.min.js
+/html/*.wasm

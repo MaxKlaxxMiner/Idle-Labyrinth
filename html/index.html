@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <title>Laby Idle</title>
+    <meta name="robots" content="noindex">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="norm.css">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: #111;
+        }
+    </style>
+</head>
+<body>
+</body>
+<script src="wasm_exec.js"></script>
+<script>
+    const go = new Go();
+    let mod, inst;
+
+    fetch("main.wasm?v=" + Date.now()).then(response => {
+        response.arrayBuffer().then(buffer => {
+            WebAssembly.instantiate(buffer, go.importObject).then((result) => {
+                mod = result.module;
+                inst = result.instance;
+                run().then(r => {
+                });
+            }).catch((err) => {
+                console.error(err);
+            })
+        }).catch((err) => {
+            console.error(err);
+        })
+    }).catch((err) => {
+        console.error(err);
+    })
+
+    async function run() {
+        await go.run(inst);
+        inst = await WebAssembly.instantiate(mod, go.importObject); // reset instance
+    }
+</script>
+</html>
