@@ -1,7 +1,12 @@
 package main
 
-import "fmt"
+import (
+	"Idle-Labyrinth/j"
+	"fmt"
+)
 
 func main() {
-	fmt.Println("hello world")
+	j.Init()
+
+	fmt.Println("hello worlds")
 }
