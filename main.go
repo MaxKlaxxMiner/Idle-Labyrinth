@@ -8,5 +8,7 @@ import (
 func main() {
 	j.Init()
 
-	fmt.Println("hello worlds")
+	w, h := j.GetWindowSize()
+	fmt.Println("hello worlds", w, h)
+	<-make(chan struct{})
 }
