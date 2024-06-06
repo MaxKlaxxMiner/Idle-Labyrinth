@@ -27,22 +27,27 @@ func main() {
 	canvas.Set("height", 480)
 	ctx := canvas.Call("getContext", "2d")
 
-	ctx.Set("strokeStyle", "#fff")
+	ctx.Set("strokeStyle", "#08f")
 	ctx.Set("lineWidth", 1)
 
 	ctx.Call("beginPath")
-	ctx.Call("moveTo", 10, 10)
-	ctx.Call("lineTo", 100, 100)
-	ctx.Call("lineTo", 50, 70)
-	ctx.Call("lineTo", 10, 10)
+	for x := 0; x < 640; x += 5 {
+		ctx.Call("moveTo", x, 0)
+		ctx.Call("lineTo", 639, 479)
+	}
 	ctx.Call("stroke")
 
 	img := j.Global.Get("Image").New()
 	img.Set("src", canvas.Call("toDataURL", "image/png"))
 
-	time.Sleep(time.Second / 10) // async problem
+	// if (this.allImages[i].complete && this.allImages[i].naturalHeight !== 0)
+	time.Sleep(time.Second / 100) // async problem
 
-	j.Ctx.Call("drawImage", img, 0, 0)
+	for y := 0; y < j.Height; y += 480 {
+		for x := 0; x < j.Width; x += 640 {
+			j.Ctx.Call("drawImage", img, x, y)
+		}
+	}
 
 	fmt.Println("hello worlds3")
 	<-make(chan struct{})
