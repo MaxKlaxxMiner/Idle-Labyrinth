@@ -177,25 +177,7 @@ export class Laby {
         this.getVWall = getVWall;
     }
 
-    getchars(blocked = "██", free = ""): string {
-        while (free.length < blocked.length) free += " ";
-        let str = "";
-        for (let y = 0; y < this.height * 2 - 1; y++) {
-            for (let x = 0; x < this.width * 2 - 1; x++) {
-                if (x % 2 === 0 && y % 2 === 0) {
-                    str += blocked; // Kreuzungspunkt der Wände
-                } else if (x % 2 === 0) {
-                    str += this.getVWall((x >> 1) + (y >> 1) * this.width) ? blocked : free;
-                } else if (y % 2 === 0) {
-                    str += this.getHWall((x >> 1) + (y >> 1) * this.width) ? blocked : free;
-                } else {
-                    str += free; // freier Raum
-                }
-            }
-            str += "\n";
-        }
-        return str;
-    }
+    // getchars entfernt (Debugausgabe) – Rendering erfolgt direkt im Game
 
     // Grid helper: returns true if tile at (x,y) is walkable/free
     // Coordinates are in the expanded grid: width*2-1 by height*2-1

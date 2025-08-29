@@ -12,10 +12,8 @@ export class Game {
   private laby!: Laby;
   private static readonly BASE_SEED = 123456;
 
-  // FPS measurement (updated roughly once per second)
-  private fpsTimer = 0;
-  private fpsFrames = 0;
-  private fpsShown = 0;
+  // Render invalidation
+  private needsRender = true;
 
   // Input and player state
   private input = new Input();
@@ -23,6 +21,9 @@ export class Game {
   private player = { x: 1, y: 1, r: 0.35, speed: 4.0 };
   private goal = { x: 0, y: 0 };
   private zoom = 1.0;
+  private spawn = { x: 1, y: 1 };
+  private moves = 0;
+  private resetLatch = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -34,9 +35,14 @@ export class Game {
     window.addEventListener('resize', this.onResize);
     this.onResize();
 
-    // Initial maze via Laby anhand Level 0
+    // Level aus LocalStorage laden (optional)
+    const saved = this.loadLevel();
+    this.level = Number.isFinite(saved) && saved! >= 0 ? saved! : 0;
+    // Initial maze für Level
     this.laby = this.createLabyForLevel(this.level);
     this.placePlayerAndGoal();
+    this.moves = 0;
+    this.needsRender = true;
   }
 
   start() {
@@ -46,7 +52,10 @@ export class Game {
       const dt = Math.min(1, (t - this.lastTime) / 1000);
       this.lastTime = t;
       this.update(dt);
-      this.render();
+      if (this.needsRender) {
+        this.render();
+        this.needsRender = false;
+      }
       this.rafId = requestAnimationFrame(loop);
     };
     this.rafId = requestAnimationFrame(loop);
@@ -61,23 +70,16 @@ export class Game {
     // Idle tick progression — expand later with resources, upgrades, etc.
     this.tickCount += 1;
 
-    // FPS accounting
-    this.fpsTimer += dt;
-    this.fpsFrames += 1;
-    if (this.fpsTimer >= 1) {
-      this.fpsShown = Math.round(this.fpsFrames / this.fpsTimer);
-      this.fpsTimer -= 1;
-      this.fpsFrames = 0;
-    }
-
     // Zoom controls
     const zd = this.input.zoomDelta();
+    const oldZoom = this.zoom;
     if (!Number.isNaN(zd)) {
       if (zd > 0) this.zoom = Math.min(3, this.zoom + 0.02);
       if (zd < 0) this.zoom = Math.max(0.5, this.zoom - 0.02);
     } else {
       this.zoom = 1.0;
     }
+    if (this.zoom !== oldZoom) this.needsRender = true;
 
     // Discrete stepping: each key press moves to next node (2 tiles)
     const step = this.input.consumeStepDir();
@@ -89,8 +91,29 @@ export class Game {
       if (this.canStepTo(this.player.x, this.player.y, nx, ny)) {
         this.player.x = nx;
         this.player.y = ny;
+        this.moves += 1;
+        this.needsRender = true;
       }
     }
+
+    // Reset / Hardreset per Taste 'R'
+    // Detect reset: prefer edge, but allow first-hold fallback with latch
+    const resetEdge = this.input.consumeKey('r', 'R');
+    const resetHeld = !this.resetLatch && this.input.isPressed('r', 'R');
+    if (resetEdge || resetHeld) {
+      this.resetLatch = true;
+      const atStart = this.player.x === this.spawn.x && this.player.y === this.spawn.y;
+      if (!atStart) {
+        if (confirm('Level zurücksetzen und zum Start zurückkehren?')) {
+          this.resetToStart();
+        }
+      } else {
+        if (confirm('HARDRESET: gesamtes Spiel zurücksetzen (Level 1) ?')) {
+          this.hardReset();
+        }
+      }
+    }
+    if (!this.input.isPressed('r', 'R')) this.resetLatch = false;
 
     // Goal check
     const dx = (this.player.x + 0.5) - (this.goal.x + 0.5);
@@ -99,6 +122,9 @@ export class Game {
       this.level += 1;
       this.laby = this.createLabyForLevel(this.level);
       this.placePlayerAndGoal();
+      this.moves = 0;
+      this.saveLevel(this.level);
+      this.needsRender = true;
     }
   }
 
@@ -151,10 +177,9 @@ export class Game {
     ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
     ctx.textBaseline = 'top';
     const lines = [
-      `FPS: ${this.fpsShown}`,
-      `Level: ${this.level + 1}`,
+      `Level: ${this.level + 1}  Moves: ${this.moves}`,
       `Zoom: ${this.zoom.toFixed(2)} (+= / - , 0 reset)`,
-      `Move: WASD/↑↓←→  Ziel: Blaues Feld`,
+      `Move: WASD/↑↓←→  Ziel: Blaues Feld  Reset: R`,
     ];
     for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], 8, 8 + i * 14);
   }
@@ -165,6 +190,7 @@ export class Game {
     this.canvas.width = Math.max(320, Math.floor(rect.width * dpr));
     this.canvas.height = Math.max(240, Math.floor(rect.height * dpr));
     this.ctx.imageSmoothingEnabled = false;
+    this.needsRender = true;
   }
 
   private createLabyForLevel(gameLevel: number): Laby {
@@ -193,7 +219,7 @@ export class Game {
         }
       }
     }
-    this.player.x = sx; this.player.y = sy;
+    this.player.x = sx; this.player.y = sy; this.spawn.x = sx; this.spawn.y = sy;
 
     // Goal: suche freie Zelle nahe (cols-2, rows-2)
     let gx = Math.max(1, cols - 2), gy = Math.max(1, rows - 2);
@@ -218,5 +244,34 @@ export class Game {
     const mx = cx + Math.sign(dx);
     const my = cy + Math.sign(dy);
     return this.laby.isFree(mx, my) && this.laby.isFree(nx, ny);
+  }
+
+  private resetToStart() {
+    this.player.x = this.spawn.x;
+    this.player.y = this.spawn.y;
+    this.moves = 0;
+    this.needsRender = true;
+  }
+
+  private hardReset() {
+    this.level = 0;
+    this.laby = this.createLabyForLevel(this.level);
+    this.placePlayerAndGoal();
+    this.moves = 0;
+    this.saveLevel(this.level);
+    this.needsRender = true;
+  }
+
+  private saveLevel(level: number) {
+    try { localStorage.setItem('idle-laby-level', String(level)); } catch {}
+  }
+
+  private loadLevel(): number | null {
+    try {
+      const v = localStorage.getItem('idle-laby-level');
+      if (v == null) return null;
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    } catch { return null; }
   }
 }

@@ -20,10 +20,9 @@ export class Input {
 
   private onKeyDown(e: KeyboardEvent) {
     const k = this.normKey(e);
-    const wasPressed = this.pressed.has(k);
-    if (!wasPressed) this.pressed.add(k);
-    // Erlaube Auto-Repeat: füge auch bei Repeat ein Edge-Event hinzu
-    if (e.repeat || !wasPressed) this.edged.add(k);
+    if (!this.pressed.has(k)) this.pressed.add(k);
+    // Edge immer setzen – damit funktionieren auch Fälle, in denen keyup verpasst wurde
+    this.edged.add(k);
   }
 
   private onKeyUp(e: KeyboardEvent) {
@@ -71,5 +70,19 @@ export class Input {
       }
     }
     return null;
+  }
+
+  consumeKey(...names: string[]): boolean {
+    for (const name of names) {
+      if (this.edged.has(name)) {
+        this.edged.delete(name);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  isPressed(...names: string[]): boolean {
+    return names.some(n => this.pressed.has(n));
   }
 }
