@@ -196,4 +196,25 @@ export class Laby {
         }
         return str;
     }
+
+    // Grid helper: returns true if tile at (x,y) is walkable/free
+    // Coordinates are in the expanded grid: width*2-1 by height*2-1
+    isFree(x: number, y: number): boolean {
+        const outW = this.width * 2 - 1;
+        const outH = this.height * 2 - 1;
+        if (x < 0 || y < 0 || x >= outW || y >= outH) return false;
+        // Intersections are walls
+        if ((x & 1) === 0 && (y & 1) === 0) return false;
+        const pos = (x >> 1) + (y >> 1) * this.width;
+        if ((x & 1) === 0) {
+            // vertical edge: free if no vertical wall
+            return !this.getVWall(pos);
+        } else if ((y & 1) === 0) {
+            // horizontal edge: free if no horizontal wall
+            return !this.getHWall(pos);
+        } else {
+            // cell interior
+            return true;
+        }
+    }
 }

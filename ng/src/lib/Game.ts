@@ -9,7 +9,7 @@ export class Game {
 
   // Simple state for the idle loop
   private tickCount = 0;
-  private cells: number[][] = [];
+  private laby!: Laby;
   private static readonly BASE_SEED = 123456;
 
   // FPS measurement (updated roughly once per second)
@@ -35,7 +35,7 @@ export class Game {
     this.onResize();
 
     // Initial maze via Laby anhand Level 0
-    this.cells = this.generateCellsForLevel(this.level);
+    this.laby = this.createLabyForLevel(this.level);
     this.placePlayerAndGoal();
   }
 
@@ -97,7 +97,7 @@ export class Game {
     const dy = (this.player.y + 0.5) - (this.goal.y + 0.5);
     if (Math.hypot(dx, dy) < 0.5) {
       this.level += 1;
-      this.cells = this.generateCellsForLevel(this.level);
+      this.laby = this.createLabyForLevel(this.level);
       this.placePlayerAndGoal();
     }
   }
@@ -109,8 +109,8 @@ export class Game {
     ctx.clearRect(0, 0, w, h);
 
     // Grid sizing + camera
-    const cols = this.cells[0]?.length ?? 1;
-    const rows = this.cells.length;
+    const cols = this.laby.width * 2 - 1;
+    const rows = this.laby.height * 2 - 1;
     const basePad = 8;
     const cw = Math.floor((w - basePad * 2) / cols);
     const ch = Math.floor((h - basePad * 2) / rows);
@@ -130,8 +130,8 @@ export class Game {
 
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
-        const v = this.cells[y][x];
-        ctx.fillStyle = v === 1 ? '#1f2937' : '#0b0b0b';
+        const free = this.laby.isFree(x, y);
+        ctx.fillStyle = free ? '#0b0b0b' : '#1f2937';
         ctx.fillRect(ox + x * size, oy + y * size, size - 1, size - 1);
       }
     }
@@ -167,36 +167,7 @@ export class Game {
     this.ctx.imageSmoothingEnabled = false;
   }
 
-  private generateCells(cols: number, rows: number): number[][] {
-    // Seed nach Vorgabe: BASE_SEED + w + h + gameLevel
-    const laby = new Laby(cols, rows, Game.BASE_SEED + cols + rows + this.level);
-    const outCols = laby.width * 2 - 1;
-    const outRows = laby.height * 2 - 1;
-    const cells: number[][] = new Array(outRows).fill(0).map(() => new Array(outCols).fill(0));
-
-    for (let y = 0; y < outRows; y++) {
-      for (let x = 0; x < outCols; x++) {
-        if ((x & 1) === 0 && (y & 1) === 0) {
-          // Intersections are walls
-          cells[y][x] = 1;
-        } else if ((x & 1) === 0) {
-          // Vertical walls
-          const pos = (x >> 1) + (y >> 1) * laby.width;
-          cells[y][x] = laby.getVWall(pos) ? 1 : 0;
-        } else if ((y & 1) === 0) {
-          // Horizontal walls
-          const pos = (x >> 1) + (y >> 1) * laby.width;
-          cells[y][x] = laby.getHWall(pos) ? 1 : 0;
-        } else {
-          // Cell interior is free
-          cells[y][x] = 0;
-        }
-      }
-    }
-    return cells;
-  }
-
-  private generateCellsForLevel(gameLevel: number): number[][] {
+  private createLabyForLevel(gameLevel: number): Laby {
     // Größenentwicklung nach Schnipsel: w,h starten bei 5 und wachsen um 2,
     // gesteuert über das Verhältnis w/h zum goldenen Schnitt.
     let w = 5;
@@ -204,14 +175,15 @@ export class Game {
     for (let i = 0; i < gameLevel; i++) {
       if (w / h < 1.61803399) w += 2; else h += 2;
     }
-    return this.generateCells(w, h);
+    // Seed nach Vorgabe: BASE_SEED + w + h + gameLevel
+    return new Laby(w, h, Game.BASE_SEED + w + h + gameLevel);
   }
 
   private placePlayerAndGoal() {
     // Start: suche erste freie Zelle nahe (1,1)
-    const rows = this.cells.length;
-    const cols = this.cells[0]?.length ?? 0;
-    const isFree = (x: number, y: number) => x >= 0 && y >= 0 && x < cols && y < rows && this.cells[y][x] === 0;
+    const rows = this.laby.height * 2 - 1;
+    const cols = this.laby.width * 2 - 1;
+    const isFree = (x: number, y: number) => this.laby.isFree(x, y);
     // Start bevorzugt ungerade/ungerade (Innenraum)
     let sx = 1, sy = 1;
     if (!isFree(sx, sy)) {
@@ -236,8 +208,8 @@ export class Game {
   }
 
   private canStepTo(cx: number, cy: number, nx: number, ny: number): boolean {
-    const rows = this.cells.length;
-    const cols = this.cells[0]?.length ?? 0;
+    const rows = this.laby.height * 2 - 1;
+    const cols = this.laby.width * 2 - 1;
     if (nx < 1 || ny < 1 || nx >= cols - 1 || ny >= rows - 1) return false;
     // Ensure stepping by 2 in a cardinal direction
     const dx = nx - cx, dy = ny - cy;
@@ -245,7 +217,6 @@ export class Game {
     // Intermediate edge must be free and destination cell must be free
     const mx = cx + Math.sign(dx);
     const my = cy + Math.sign(dy);
-    const isFree = (x: number, y: number) => this.cells[y]?.[x] === 0;
-    return isFree(mx, my) && isFree(nx, ny);
+    return this.laby.isFree(mx, my) && this.laby.isFree(nx, ny);
   }
 }
