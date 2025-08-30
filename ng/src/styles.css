@@ -1,20 +1,21 @@
-:root{
-  --bg: #111;
-  --fg: #eaeaea;
-  --accent: #5ee0a2;
+:root {
+    --bg: #111;
+    --fg: #eaeaea;
+    --accent: #5ee0a2;
 }
 
-* { box-sizing: border-box; }
+* {
+    box-sizing: border-box;
+}
 
 .hud {
-  position: fixed;
-  bottom: 8px;
-  right: 8px;
-  background: rgba(0,0,0,0.5);
-  color: var(--fg);
-  padding: 6px 8px;
-  border: 1px solid #222;
-  border-radius: 6px;
-  font-size: 12px;
+    position: fixed;
+    bottom: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.5);
+    color: var(--fg);
+    padding: 6px 8px;
+    border: 1px solid #222;
+    border-radius: 6px;
+    font-size: 12px;
 }
-

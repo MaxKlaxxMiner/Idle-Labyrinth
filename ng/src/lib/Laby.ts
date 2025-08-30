@@ -1,4 +1,4 @@
-import { RandomMersenne } from "./Random";
+import {RandomMersenne} from "./Random";
 
 export class Laby {
     readonly width: number;
@@ -176,8 +176,6 @@ export class Laby {
         this.getHWall = getHWall;
         this.getVWall = getVWall;
     }
-
-    // getchars entfernt (Debugausgabe) – Rendering erfolgt direkt im Game
 
     // Grid helper: returns true if tile at (x,y) is walkable/free
     // Coordinates are in the expanded grid: width*2-1 by height*2-1
