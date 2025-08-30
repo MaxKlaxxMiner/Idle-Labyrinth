@@ -8,22 +8,10 @@
     <style>
       html, body { height: 100%; margin: 0; }
       body { background: #111; color: #eaeaea; font-family: Inter, system-ui, Arial, sans-serif; }
-      #app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
-      header { padding: 8px 12px; border-bottom: 1px solid #222; background: #0e0e0e; }
-      #game-wrap { display: grid; place-items: center; padding: 8px; }
-      canvas { background: #0a0a0a; width: min(96vw, 960px); height: min(70vh, 720px); image-rendering: pixelated; border: 1px solid #222; }
+      canvas { background: #0a0a0a; width: 100vw; height: 100vh; image-rendering: pixelated; display: block; }
     </style>
   </head>
   <body>
-    <div id="app">
-      <header>
-        <strong>Idle Labyrinth</strong>
-        <span id="status" style="opacity:.7; margin-left:8px; font-size: 0.9em;">lädt…</span>
-      </header>
-      <div id="game-wrap">
-        <canvas id="game" width="480" height="320"></canvas>
-      </div>
-    </div>
+    <canvas id="game" width="480" height="320"></canvas>
   </body>
   </html>
-
