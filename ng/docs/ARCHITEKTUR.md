@@ -6,6 +6,7 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 
 - `src/index.ts`: Bootstrap, bindet Styles, sucht das Canvas `#game`, instanziert `Game` und startet die Schleife. Legt zu Debugzwecken `window.__game` ab.
 - `src/lib/Game.ts`: Zentrale Spielklasse (Game-Loop, Eingabe, Level-/Renderlogik, Persistenz).
+- `src/lib/Game.ts`: Zentrale Spielklasse (Game-Loop, Eingabe, Level-/Renderlogik, Persistenz, Pfad-Historie/Undo).
 - `src/lib/Laby.ts`: Deterministischer, seed-basierter Labyrinth-Generator mit „expandiertem“ Grid und `isFree(x,y)`-Abfrage.
 - `src/lib/Input.ts`: Tastatureingabe (gedebouncte Schrittsteuerung, Zoom, Reset).
 - `src/lib/Random.ts`: Zufall (Mersenne Twister + schneller LCG).
@@ -20,14 +21,17 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 2) Game-Loop und Zustände (`Game`)
 - Start/Stop per `requestAnimationFrame`; `update(dt)` + bedarfsorientiertes `render()` (invalidate via `needsRender`).
 - Eingabe: `Input.consumeStepDir()` liefert pro Tastendruck genau einen Schritt (Determinismus durch Prioritätsreihenfolge). `zoomDelta()` steuert Zoom; `consumeKey('r')` für Reset (Edge-getriggert). Zusätzlich Latch-Logik für gehaltenes „R“.
+- Undo: `Backspace`/`Delete` macht den letzten Schritt rückgängig (Autorepeat funktioniert über wiederholte `keydown`-Events; `Input.consumeKey()` verarbeitet diese).
 - Levelgröße wächst über eine einfache Heuristik (Start 5x5, Zuwachs um 2, Verhältnis nähert goldenen Schnitt an). Seed: `BASE_SEED + w + h + level`.
 - Spawn/Goal: Sucht jeweils die nächste freie Innenzelle nahe (1,1) bzw. (cols-2, rows-2).
 - Persistenz: Speichert `level` in `localStorage` unter `idle-laby-level`.
+- Pfad-Historie: `history: string`, speichert Bewegungen als Zeichenfolge aus `L/R/U/D`. Beim Vorwärtsgehen wird ein Zeichen angehängt; beim Undo entfernt.
 
 3) Rendering (Canvas 2D)
 - Errechnet expandiertes Grid (`cols = w*2-1`, `rows = h*2-1`).
 - Kachelgröße aus Canvas-Dimensionen, Zoomfaktor und Padding bestimmt; Kamera folgt dem Spieler und wird bei kleinen Labyrinthen zentriert/geclamped.
-- Wände/Durchgänge über `Laby.isFree(x,y)`: freie Flächen dunkel, Wände etwas heller; Ziel blau, Spieler gelb (Kreis). HUD (Level, Moves, Steuerhilfe) oben links.
+- Wände/Durchgänge über `Laby.isFree(x,y)`: freie Flächen dunkel, Wände etwas heller; Ziel blau, Spieler gelb (Kreis). Gelaufener Weg wird aus `history` rekonstruiert (Startknoten, Kanten und Zielknoten je Schritt) und halbtransparent gelb übermalt.
+- HUD (Level, Moves, Steuerhilfe) oben links.
 - Resize passt Auflösung an `devicePixelRatio` (max. 2) an; `imageSmoothing` ist aus.
 
 4) Labyrinth (`Laby`)
@@ -56,4 +60,3 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 - Scripts: `npm run dev`, `npm run build`, `npm run typecheck`.
 - TypeScript: `strict` aktiv; Pfad-Alias `@/*` → `src/*`.
 - Webpack DevServer: Port 5173, HMR; Source Maps in Dev (`eval-cheap-module-source-map`), in Prod `source-map`.
-

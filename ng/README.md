@@ -35,6 +35,8 @@ Ein leichtgewichtiges Gerüst für ein webbasiertes Idle-/Labyrinth-Spiel. Imple
 - Ziel: Das blaue Feld erreichen, um zum nächsten Level zu wechseln.
 - Zoom: `+`/`-` zum stufenweisen Zoomen, `0` setzt den Zoom zurück.
 - Reset: `R` setzt auf den Startpunkt zurück; wenn bereits am Start, fragt ein Hard-Reset (Spielstand auf Level 1) nach Bestätigung.
+- Pfad-Historie: Jeder Schritt wird als `L/R/U/D` gespeichert und als halbtransparenter, gelber Weg nachgezeichnet.
+- Rückgängig: `Backspace`/`Entf` macht genau einen Schritt rückgängig (bei gedrückt halten Autorepeat).
 - Fortschritt: Das aktuelle Level wird in `localStorage` gespeichert (`idle-laby-level`).
 
 ## Projektstruktur
@@ -53,7 +55,7 @@ Ein leichtgewichtiges Gerüst für ein webbasiertes Idle-/Labyrinth-Spiel. Imple
 
 ## Technische Details
 
-- Rendering: 2D-Canvas mit einfacher Kachel-/Kantenzeichnung; Kamera folgt dem Spieler, Clamping bei kleinen Labyrinthen.
+- Rendering: 2D-Canvas mit einfacher Kachel-/Kantenzeichnung; Kamera folgt dem Spieler, Clamping bei kleinen Labyrinthen. Gelaufene Wege werden aus der `L/R/U/D`-Historie rekonstruiert und halbtransparent eingefärbt.
 - Grid: Internes Zellenraster wird auf ein „expandiertes“ Raster (`w*2-1` x `h*2-1`) abgebildet. `Laby.isFree(x,y)` signalisiert, ob eine Zelle/ Kante begehbar ist.
 - Generator: `Laby` erzeugt per seed deterministische Labyrinthe; Levelgröße wächst abhängig vom Verhältnis (nähert den goldenen Schnitt an).
 - Eingabe: `Input.consumeStepDir()` liefert pro Tastendruck genau einen diskreten Schritt; `zoomDelta()` und `consumeKey()` steuern Zoom/Reset.

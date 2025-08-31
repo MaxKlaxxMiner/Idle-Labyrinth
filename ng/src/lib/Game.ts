@@ -24,6 +24,8 @@ export class Game {
     private spawn = {x: 1, y: 1};
     private moves = 0;
     private resetLatch = false;
+    private trailColor = 'rgba(253, 224, 71, 0.2)'; // sehr dezenter Gelb-Ton mit Alpha
+    private history = '';
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -42,6 +44,7 @@ export class Game {
         this.laby = this.createLabyForLevel(this.level);
         this.placePlayerAndGoal();
         this.moves = 0;
+        this.history = '';
         this.needsRender = true;
     }
 
@@ -81,18 +84,44 @@ export class Game {
         }
         if (this.zoom !== oldZoom) this.needsRender = true;
 
-        // Discrete stepping: each key press moves to next node (2 tiles)
-        const step = this.input.consumeStepDir();
-        if (step) {
-            const sx = step.dx * 2;
-            const sy = step.dy * 2;
-            const nx = this.player.x + sx;
-            const ny = this.player.y + sy;
-            if (this.canStepTo(this.player.x, this.player.y, nx, ny)) {
-                this.player.x = nx;
-                this.player.y = ny;
-                this.moves += 1;
-                this.needsRender = true;
+        // Undo: Backspace/Delete -> genau einen Schritt zurück (Autorepeat durch Keydown-Repeat)
+        if (this.input.consumeKey('Backspace', 'Delete')) {
+            if (this.history.length > 0) {
+                const last = this.history.charAt(this.history.length - 1);
+                this.history = this.history.slice(0, -1);
+                let dx = 0, dy = 0;
+                if (last === 'L') dx = 1;
+                else if (last === 'R') dx = -1;
+                else if (last === 'U') dy = 1;
+                else if (last === 'D') dy = -1;
+                const nx = this.player.x + dx * 2;
+                const ny = this.player.y + dy * 2;
+                if (this.canStepTo(this.player.x, this.player.y, nx, ny)) {
+                    this.player.x = nx;
+                    this.player.y = ny;
+                    this.moves = Math.max(0, this.moves - 1);
+                    this.needsRender = true;
+                }
+            }
+        } else {
+            // Discretes Vorwärts-Stepping: pro Tastendruck 1 Knoten (2 Tiles)
+            const step = this.input.consumeStepDir();
+            if (step) {
+                const sx = step.dx * 2;
+                const sy = step.dy * 2;
+                const nx = this.player.x + sx;
+                const ny = this.player.y + sy;
+                if (this.canStepTo(this.player.x, this.player.y, nx, ny)) {
+                    this.player.x = nx;
+                    this.player.y = ny;
+                    // Historie aufzeichnen (L/R/U/D)
+                    if (step.dx === -1) this.history += 'L';
+                    else if (step.dx === 1) this.history += 'R';
+                    else if (step.dy === -1) this.history += 'U';
+                    else if (step.dy === 1) this.history += 'D';
+                    this.moves += 1;
+                    this.needsRender = true;
+                }
             }
         }
 
@@ -123,6 +152,7 @@ export class Game {
             this.laby = this.createLabyForLevel(this.level);
             this.placePlayerAndGoal();
             this.moves = 0;
+            this.history = '';
             this.saveLevel(this.level);
             this.needsRender = true;
         }
@@ -160,6 +190,33 @@ export class Game {
                 ctx.fillStyle = free ? '#0b0b0b' : '#1f2937';
                 ctx.fillRect(ox + x * size, oy + y * size, size - 1, size - 1);
             }
+        }
+
+        // Gelaufenen Weg halbtransparent nachzeichnen (aus Historie L/R/U/D vom Spawn aus)
+        if (this.history.length > 0) {
+            ctx.save();
+            ctx.fillStyle = this.trailColor;
+            let cx = this.spawn.x;
+            let cy = this.spawn.y;
+            // Startknoten hervorheben
+            ctx.fillRect(ox + cx * size, oy + cy * size, size - 1, size - 1);
+            for (let i = 0; i < this.history.length; i++) {
+                const c = this.history.charAt(i);
+                let dx = 0, dy = 0;
+                if (c === 'L') dx = -1;
+                else if (c === 'R') dx = 1;
+                else if (c === 'U') dy = -1;
+                else if (c === 'D') dy = 1;
+                const mx = cx + Math.sign(dx);
+                const my = cy + Math.sign(dy);
+                const nx = cx + dx * 2;
+                const ny = cy + dy * 2;
+                // Kante und Zielknoten einfärben
+                ctx.fillRect(ox + mx * size, oy + my * size, size - 1, size - 1);
+                ctx.fillRect(ox + nx * size, oy + ny * size, size - 1, size - 1);
+                cx = nx; cy = ny;
+            }
+            ctx.restore();
         }
 
         // Draw goal
@@ -262,6 +319,7 @@ export class Game {
         this.player.x = this.spawn.x;
         this.player.y = this.spawn.y;
         this.moves = 0;
+        this.history = '';
         this.needsRender = true;
     }
 
@@ -270,6 +328,7 @@ export class Game {
         this.laby = this.createLabyForLevel(this.level);
         this.placePlayerAndGoal();
         this.moves = 0;
+        this.history = '';
         this.saveLevel(this.level);
         this.needsRender = true;
     }

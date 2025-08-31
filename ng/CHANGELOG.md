@@ -5,6 +5,8 @@ Dieses Projekt folgt dem Format von „Keep a Changelog“ und SemVer (siehe VER
 ## [Unreleased]
 - Doku: Architekturübersicht ergänzt (docs/ARCHITEKTUR.md)
 - Changelog und Versionierungsleitfaden hinzugefügt
+- Feature: Pfad-Historie (`L/R/U/D`) mit halbtransparentem gelbem Nachzeichnen der gelaufenen Wege
+- Feature: Undo pro Schritt via `Backspace`/`Entf` (mit Autorepeat)
 
 ## [0.1.0] - 2025-08-30
 - Initiales Gerüst: TypeScript + Webpack 5 + DevServer
@@ -17,4 +19,3 @@ Dieses Projekt folgt dem Format von „Keep a Changelog“ und SemVer (siehe VER
 [Unreleased]: ./compare/v0.1.0...HEAD
 [0.1.0]: ./releases/tag/v0.1.0
 -->
-
