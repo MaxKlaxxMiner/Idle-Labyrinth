@@ -25,7 +25,9 @@ export class Game {
     private level = 0; // gameLevel beginnt bei 0
     private player = {x: 1, y: 1, r: 0.35, speed: 4.0};
     private goal = {x: 0, y: 0};
-    private zoom = 1.0;
+    // Discrete zoom via tile sizes
+    private tileSizeIndex = 0;
+    private initialTileSizeIndex = 0;
     private spawn = {x: 1, y: 1};
     private moves = 0;
     private resetLatch = false;
@@ -64,6 +66,9 @@ export class Game {
         // Initial maze für Level
         this.laby = this.createLabyForLevel(this.level);
         this.placePlayerAndGoal();
+        // Initial tile size selection (fit view, but not below minStartTileSize)
+        this.initialTileSizeIndex = this.selectInitialTileSizeIndex();
+        this.tileSizeIndex = this.initialTileSizeIndex;
         this.moves = 0;
         this.history = '';
         this.needsRender = true;
@@ -95,15 +100,17 @@ export class Game {
         this.tickCount += 1;
 
         // Zoom controls
-        const zd = this.input.zoomDelta();
-        const oldZoom = this.zoom;
-        if (!Number.isNaN(zd)) {
-            if (zd > 0) this.zoom = Math.min(Consts.zoom.max, this.zoom + Consts.zoom.step);
-            if (zd < 0) this.zoom = Math.max(Consts.zoom.min, this.zoom - Consts.zoom.step);
-        } else {
-            this.zoom = Consts.zoom.reset;
+        const oldIndex = this.tileSizeIndex;
+        if (this.input.consumeKey('0')) {
+            // Recompute best-fit on demand to respect current canvas size
+            this.initialTileSizeIndex = this.selectInitialTileSizeIndex();
+            this.tileSizeIndex = this.initialTileSizeIndex;
+        } else if (this.input.consumeKey('+', '=')) {
+            this.tileSizeIndex = Math.min(Consts.zoom.steps.length - 1, this.tileSizeIndex + 1);
+        } else if (this.input.consumeKey('-')) {
+            this.tileSizeIndex = Math.max(0, this.tileSizeIndex - 1);
         }
-        if (this.zoom !== oldZoom) this.needsRender = true;
+        if (this.tileSizeIndex !== oldIndex) this.needsRender = true;
 
         // Undo: Backspace/Delete -> genau einen Schritt zurück (Autorepeat durch Keydown-Repeat)
         if (this.input.consumeKey('Backspace', 'Delete')) {
@@ -195,6 +202,9 @@ export class Game {
             this.level += 1;
             this.laby = this.createLabyForLevel(this.level);
             this.placePlayerAndGoal();
+            // On level up, choose best-fit start zoom
+            this.initialTileSizeIndex = this.selectInitialTileSizeIndex();
+            this.tileSizeIndex = this.initialTileSizeIndex;
             this.moves = 0;
             this.history = '';
             this.backtrackedEdges.clear();
@@ -215,10 +225,8 @@ export class Game {
         const cols = this.laby.width * 2 - 1;
         const rows = this.laby.height * 2 - 1;
         const basePad = Consts.sizes.basePad;
-        const cw = Math.floor((w - basePad * 2) / cols);
-        const ch = Math.floor((h - basePad * 2) / rows);
-        const sizeBase = Math.max(Consts.sizes.minTileSize, Math.min(cw, ch));
-        const size = Math.max(Consts.sizes.minTileSize, Math.floor(sizeBase * this.zoom));
+        const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
+        const drawSize = size >= Consts.sizes.gapThreshold ? (size - 1) : size;
         const worldW = cols * size;
         const worldH = rows * size;
         const playerPx = (this.player.x + 0.5) * size;
@@ -235,7 +243,7 @@ export class Game {
             for (let x = 0; x < cols; x++) {
                 const free = this.laby.isFree(x, y);
                 this.ctx.fillStyle = free ? Consts.colors.tileFree : Consts.colors.tileWall;
-                this.ctx.fillRect(ox + x * size, oy + y * size, size - 1, size - 1);
+                this.ctx.fillRect(ox + x * size, oy + y * size, drawSize, drawSize);
             }
         }
 
@@ -256,7 +264,7 @@ export class Game {
             }
             for (const tile of grayTiles) {
                 const [tx, ty] = tile.split(',').map(n => parseInt(n, 10));
-                this.ctx.fillRect(ox + tx * size, oy + ty * size, size - 1, size - 1);
+                this.ctx.fillRect(ox + tx * size, oy + ty * size, drawSize, drawSize);
             }
             this.ctx.restore();
         }
@@ -268,7 +276,7 @@ export class Game {
             let cx = this.spawn.x;
             let cy = this.spawn.y;
             // Startknoten hervorheben
-            this.ctx.fillRect(ox + cx * size, oy + cy * size, size - 1, size - 1);
+            this.ctx.fillRect(ox + cx * size, oy + cy * size, drawSize, drawSize);
             for (let i = 0; i < this.history.length; i++) {
                 const c = this.history.charAt(i);
                 let dx = 0, dy = 0;
@@ -281,22 +289,31 @@ export class Game {
                 const nx = cx + dx * 2;
                 const ny = cy + dy * 2;
                 // Kante und Zielknoten einfärben
-                this.ctx.fillRect(ox + mx * size, oy + my * size, size - 1, size - 1);
-                this.ctx.fillRect(ox + nx * size, oy + ny * size, size - 1, size - 1);
-                cx = nx; cy = ny;
+                this.ctx.fillRect(ox + mx * size, oy + my * size, drawSize, drawSize);
+                this.ctx.fillRect(ox + nx * size, oy + ny * size, drawSize, drawSize);
+                cx = nx;
+                cy = ny;
             }
             this.ctx.restore();
         }
 
         // Draw goal
         this.fgCtx.fillStyle = Consts.colors.goal;
-        this.fgCtx.fillRect(ox + this.goal.x * size + size * 0.25, oy + this.goal.y * size + size * 0.25, size * 0.5, size * 0.5);
+        if (size < Consts.sizes.smallTileThreshold) {
+            this.fgCtx.fillRect(ox + this.goal.x * size, oy + this.goal.y * size, size, size);
+        } else {
+            this.fgCtx.fillRect(ox + this.goal.x * size + size * 0.25, oy + this.goal.y * size + size * 0.25, size * 0.5, size * 0.5);
+        }
 
         // Draw player (yellow circle)
         this.fgCtx.fillStyle = Consts.colors.player;
-        this.fgCtx.beginPath();
-        this.fgCtx.arc(ox + (this.player.x + 0.5) * size, oy + (this.player.y + 0.5) * size, this.player.r * size, 0, Math.PI * 2);
-        this.fgCtx.fill();
+        if (size < Consts.sizes.smallTileThreshold) {
+            this.fgCtx.fillRect(ox + this.player.x * size, oy + this.player.y * size, size, size);
+        } else {
+            this.fgCtx.beginPath();
+            this.fgCtx.arc(ox + (this.player.x + 0.5) * size, oy + (this.player.y + 0.5) * size, this.player.r * size, 0, Math.PI * 2);
+            this.fgCtx.fill();
+        }
 
         // HUD (foreground)
         this.fgCtx.fillStyle = Consts.colors.hudText;
@@ -304,7 +321,7 @@ export class Game {
         this.fgCtx.textBaseline = 'top';
         const lines = [
             `Level: ${this.level + 1}  Moves: ${this.moves}`,
-            `Zoom: ${this.zoom.toFixed(2)} (+= / - , 0 reset)`,
+            `Tile: ${size}px  (+ / - , 0 fit)`,
             `Move: WASD/↑↓←→  Ziel: Blaues Feld  Reset: R`,
         ];
         for (let i = 0; i < lines.length; i++) this.fgCtx.fillText(lines[i], 8, 8 + i * 14);
@@ -321,7 +338,38 @@ export class Game {
         this.fgCanvas.height = h;
         this.ctx.imageSmoothingEnabled = false;
         this.fgCtx.imageSmoothingEnabled = false;
+        // Refresh initial fit index for future '0' resets
+        if (this.laby) {
+            this.initialTileSizeIndex = this.selectInitialTileSizeIndex();
+        }
         this.needsRender = true;
+    }
+
+    private selectInitialTileSizeIndex(): number {
+        const steps = Consts.zoom.steps;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const cols = this.laby.width * 2 - 1;
+        const rows = this.laby.height * 2 - 1;
+        const maxTileW = Math.floor((w - Consts.sizes.basePad * 2) / cols);
+        const maxTileH = Math.floor((h - Consts.sizes.basePad * 2) / rows);
+        const maxFit = Math.max(Consts.sizes.minTileSize, Math.min(maxTileW, maxTileH));
+        const minStart = Consts.zoom.minStartTileSize;
+        // Choose largest step <= maxFit, but not below minStart
+        let idx = 0;
+        for (let i = 0; i < steps.length; i++) {
+            if (steps[i] <= maxFit) idx = i;
+        }
+        if (steps[idx] < minStart) {
+            // enforce minimum start size (panning will handle overflow)
+            for (let i = 0; i < steps.length; i++) {
+                if (steps[i] >= minStart) {
+                    idx = i;
+                    break;
+                }
+            }
+        }
+        return idx;
     }
 
     private createLabyForLevel(gameLevel: number): Laby {
@@ -395,6 +443,9 @@ export class Game {
         this.moves = 0;
         this.history = '';
         this.backtrackedEdges.clear();
+        // On reset, choose best-fit start zoom
+        this.initialTileSizeIndex = this.selectInitialTileSizeIndex();
+        this.tileSizeIndex = this.initialTileSizeIndex;
         this.needsRender = true;
     }
 
@@ -402,6 +453,9 @@ export class Game {
         this.level = 0;
         this.laby = this.createLabyForLevel(this.level);
         this.placePlayerAndGoal();
+        // On hard reset, choose best-fit start zoom
+        this.initialTileSizeIndex = this.selectInitialTileSizeIndex();
+        this.tileSizeIndex = this.initialTileSizeIndex;
         this.moves = 0;
         this.history = '';
         this.backtrackedEdges.clear();
