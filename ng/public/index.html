@@ -8,7 +8,9 @@
     <style>
       html, body { height: 100%; margin: 0; }
       body { background: #111; color: #eaeaea; font-family: Inter, system-ui, Arial, sans-serif; }
-      canvas { background: #0a0a0a; width: 100vw; height: 100vh; image-rendering: pixelated; display: block; }
+      canvas#game, canvas#game-fg { width: 100vw; height: 100vh; image-rendering: pixelated; display: block; }
+      canvas#game { background: #0a0a0a; }
+      canvas#game-fg { background: transparent; }
     </style>
   </head>
   <body>

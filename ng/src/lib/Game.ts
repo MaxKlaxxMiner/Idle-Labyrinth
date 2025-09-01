@@ -1,9 +1,14 @@
 import {Laby} from './Laby';
 import {Input} from './Input';
+import {Consts} from './Consts';
 
 export class Game {
+    // Background canvas (bestehend)
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
+    // Foreground overlay (neu)
+    private fgCanvas: HTMLCanvasElement;
+    private fgCtx: CanvasRenderingContext2D;
     private rafId: number | null = null;
     private lastTime = 0;
 
@@ -24,8 +29,8 @@ export class Game {
     private spawn = {x: 1, y: 1};
     private moves = 0;
     private resetLatch = false;
-    private trailColor = 'rgba(253, 224, 71, 0.2)'; // sehr dezenter Gelb-Ton mit Alpha
-    private backtrackColor = 'rgba(148, 163, 184, 0.15)'; // blasseres Grau
+    private trailColor = Consts.colors.trail; // sehr dezenter Gelb-Ton mit Alpha
+    private backtrackColor = Consts.colors.backtrack; // blasseres Grau
     private history = '';
     private backtrackedEdges = new Set<string>(); // Kanten, die aktiv zurückgelaufen wurden
 
@@ -34,6 +39,20 @@ export class Game {
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Canvas 2D Context nicht verfügbar');
         this.ctx = ctx;
+
+        // Foreground-Canvas erzeugen und überlagern
+        const fg = document.createElement('canvas');
+        fg.id = 'game-fg';
+        fg.style.position = 'absolute';
+        fg.style.left = '0';
+        fg.style.top = '0';
+        fg.style.zIndex = '1';
+        fg.style.pointerEvents = 'none';
+        (this.canvas.parentElement || document.body).appendChild(fg);
+        const fgCtx = fg.getContext('2d');
+        if (!fgCtx) throw new Error('Canvas 2D Context (fg) nicht verfügbar');
+        this.fgCanvas = fg;
+        this.fgCtx = fgCtx;
 
         this.onResize = this.onResize.bind(this);
         window.addEventListener('resize', this.onResize);
@@ -79,10 +98,10 @@ export class Game {
         const zd = this.input.zoomDelta();
         const oldZoom = this.zoom;
         if (!Number.isNaN(zd)) {
-            if (zd > 0) this.zoom = Math.min(3, this.zoom + 0.02);
-            if (zd < 0) this.zoom = Math.max(0.5, this.zoom - 0.02);
+            if (zd > 0) this.zoom = Math.min(Consts.zoom.max, this.zoom + Consts.zoom.step);
+            if (zd < 0) this.zoom = Math.max(Consts.zoom.min, this.zoom - Consts.zoom.step);
         } else {
-            this.zoom = 1.0;
+            this.zoom = Consts.zoom.reset;
         }
         if (this.zoom !== oldZoom) this.needsRender = true;
 
@@ -185,19 +204,21 @@ export class Game {
     }
 
     private render() {
-        const ctx = this.ctx;
         const w = this.canvas.width;
         const h = this.canvas.height;
-        ctx.clearRect(0, 0, w, h);
+        // BG: Maze
+        this.ctx.clearRect(0, 0, w, h);
+        // FG: Overlays
+        this.fgCtx.clearRect(0, 0, w, h);
 
         // Grid sizing + camera
         const cols = this.laby.width * 2 - 1;
         const rows = this.laby.height * 2 - 1;
-        const basePad = 8;
+        const basePad = Consts.sizes.basePad;
         const cw = Math.floor((w - basePad * 2) / cols);
         const ch = Math.floor((h - basePad * 2) / rows);
-        const sizeBase = Math.max(2, Math.min(cw, ch));
-        const size = Math.max(2, Math.floor(sizeBase * this.zoom));
+        const sizeBase = Math.max(Consts.sizes.minTileSize, Math.min(cw, ch));
+        const size = Math.max(Consts.sizes.minTileSize, Math.floor(sizeBase * this.zoom));
         const worldW = cols * size;
         const worldH = rows * size;
         const playerPx = (this.player.x + 0.5) * size;
@@ -213,15 +234,15 @@ export class Game {
         for (let y = 0; y < rows; y++) {
             for (let x = 0; x < cols; x++) {
                 const free = this.laby.isFree(x, y);
-                ctx.fillStyle = free ? '#0b0b0b' : '#1f2937';
-                ctx.fillRect(ox + x * size, oy + y * size, size - 1, size - 1);
+                this.ctx.fillStyle = free ? Consts.colors.tileFree : Consts.colors.tileWall;
+                this.ctx.fillRect(ox + x * size, oy + y * size, size - 1, size - 1);
             }
         }
 
         // Bereits zurückgelaufene Kanten dezent hervorheben (unter dem aktuellen Pfad)
         if (this.backtrackedEdges.size > 0) {
-            ctx.save();
-            ctx.fillStyle = this.backtrackColor;
+            this.ctx.save();
+            this.ctx.fillStyle = this.backtrackColor;
             const grayTiles = new Set<string>();
             for (const key of this.backtrackedEdges) {
                 const [a, b] = key.split('|');
@@ -235,19 +256,19 @@ export class Game {
             }
             for (const tile of grayTiles) {
                 const [tx, ty] = tile.split(',').map(n => parseInt(n, 10));
-                ctx.fillRect(ox + tx * size, oy + ty * size, size - 1, size - 1);
+                this.ctx.fillRect(ox + tx * size, oy + ty * size, size - 1, size - 1);
             }
-            ctx.restore();
+            this.ctx.restore();
         }
 
         // Gelaufenen Weg halbtransparent nachzeichnen (aus Historie L/R/U/D vom Spawn aus)
         if (this.history.length > 0) {
-            ctx.save();
-            ctx.fillStyle = this.trailColor;
+            this.ctx.save();
+            this.ctx.fillStyle = this.trailColor;
             let cx = this.spawn.x;
             let cy = this.spawn.y;
             // Startknoten hervorheben
-            ctx.fillRect(ox + cx * size, oy + cy * size, size - 1, size - 1);
+            this.ctx.fillRect(ox + cx * size, oy + cy * size, size - 1, size - 1);
             for (let i = 0; i < this.history.length; i++) {
                 const c = this.history.charAt(i);
                 let dx = 0, dy = 0;
@@ -260,41 +281,46 @@ export class Game {
                 const nx = cx + dx * 2;
                 const ny = cy + dy * 2;
                 // Kante und Zielknoten einfärben
-                ctx.fillRect(ox + mx * size, oy + my * size, size - 1, size - 1);
-                ctx.fillRect(ox + nx * size, oy + ny * size, size - 1, size - 1);
+                this.ctx.fillRect(ox + mx * size, oy + my * size, size - 1, size - 1);
+                this.ctx.fillRect(ox + nx * size, oy + ny * size, size - 1, size - 1);
                 cx = nx; cy = ny;
             }
-            ctx.restore();
+            this.ctx.restore();
         }
 
         // Draw goal
-        ctx.fillStyle = '#38bdf8';
-        ctx.fillRect(ox + this.goal.x * size + size * 0.25, oy + this.goal.y * size + size * 0.25, size * 0.5, size * 0.5);
+        this.fgCtx.fillStyle = Consts.colors.goal;
+        this.fgCtx.fillRect(ox + this.goal.x * size + size * 0.25, oy + this.goal.y * size + size * 0.25, size * 0.5, size * 0.5);
 
         // Draw player (yellow circle)
-        ctx.fillStyle = '#fde047';
-        ctx.beginPath();
-        ctx.arc(ox + (this.player.x + 0.5) * size, oy + (this.player.y + 0.5) * size, this.player.r * size, 0, Math.PI * 2);
-        ctx.fill();
+        this.fgCtx.fillStyle = Consts.colors.player;
+        this.fgCtx.beginPath();
+        this.fgCtx.arc(ox + (this.player.x + 0.5) * size, oy + (this.player.y + 0.5) * size, this.player.r * size, 0, Math.PI * 2);
+        this.fgCtx.fill();
 
-        // HUD
-        ctx.fillStyle = '#eaeaea';
-        ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-        ctx.textBaseline = 'top';
+        // HUD (foreground)
+        this.fgCtx.fillStyle = Consts.colors.hudText;
+        this.fgCtx.font = Consts.sizes.hudFont;
+        this.fgCtx.textBaseline = 'top';
         const lines = [
             `Level: ${this.level + 1}  Moves: ${this.moves}`,
             `Zoom: ${this.zoom.toFixed(2)} (+= / - , 0 reset)`,
             `Move: WASD/↑↓←→  Ziel: Blaues Feld  Reset: R`,
         ];
-        for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], 8, 8 + i * 14);
+        for (let i = 0; i < lines.length; i++) this.fgCtx.fillText(lines[i], 8, 8 + i * 14);
     }
 
     private onResize() {
-        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        const dpr = Math.min(Consts.display.dprMax, window.devicePixelRatio || 1);
         const rect = this.canvas.getBoundingClientRect();
-        this.canvas.width = Math.max(320, Math.floor(rect.width * dpr));
-        this.canvas.height = Math.max(240, Math.floor(rect.height * dpr));
+        const w = Math.max(320, Math.floor(rect.width * dpr));
+        const h = Math.max(240, Math.floor(rect.height * dpr));
+        this.canvas.width = w;
+        this.canvas.height = h;
+        this.fgCanvas.width = w;
+        this.fgCanvas.height = h;
         this.ctx.imageSmoothingEnabled = false;
+        this.fgCtx.imageSmoothingEnabled = false;
         this.needsRender = true;
     }
 
