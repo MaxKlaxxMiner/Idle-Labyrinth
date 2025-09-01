@@ -25,7 +25,9 @@ export class Game {
     private moves = 0;
     private resetLatch = false;
     private trailColor = 'rgba(253, 224, 71, 0.2)'; // sehr dezenter Gelb-Ton mit Alpha
+    private backtrackColor = 'rgba(148, 163, 184, 0.15)'; // blasseres Grau
     private history = '';
+    private backtrackedEdges = new Set<string>(); // Kanten, die aktiv zurückgelaufen wurden
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -97,6 +99,8 @@ export class Game {
                 const nx = this.player.x + dx * 2;
                 const ny = this.player.y + dy * 2;
                 if (this.canStepTo(this.player.x, this.player.y, nx, ny)) {
+                    // Kante als zurückgelaufen markieren
+                    this.markBacktrackedEdge(this.player.x, this.player.y, nx, ny);
                     this.player.x = nx;
                     this.player.y = ny;
                     this.moves = Math.max(0, this.moves - 1);
@@ -109,17 +113,38 @@ export class Game {
             if (step) {
                 const sx = step.dx * 2;
                 const sy = step.dy * 2;
-                const nx = this.player.x + sx;
-                const ny = this.player.y + sy;
-                if (this.canStepTo(this.player.x, this.player.y, nx, ny)) {
+                const prevX = this.player.x;
+                const prevY = this.player.y;
+                const nx = prevX + sx;
+                const ny = prevY + sy;
+                if (this.canStepTo(prevX, prevY, nx, ny)) {
                     this.player.x = nx;
                     this.player.y = ny;
-                    // Historie aufzeichnen (L/R/U/D)
-                    if (step.dx === -1) this.history += 'L';
-                    else if (step.dx === 1) this.history += 'R';
-                    else if (step.dy === -1) this.history += 'U';
-                    else if (step.dy === 1) this.history += 'D';
-                    this.moves += 1;
+                    // Schrittzeichen bestimmen (L/R/U/D)
+                    let stepChar: 'L' | 'R' | 'U' | 'D';
+                    if (step.dx === -1) stepChar = 'L';
+                    else if (step.dx === 1) stepChar = 'R';
+                    else if (step.dy === -1) stepChar = 'U';
+                    else stepChar = 'D';
+
+                    // Wenn der Schritt die genaue Umkehrung des letzten ist, dann backtracken
+                    const last = this.history.charAt(this.history.length - 1);
+                    const isUndo =
+                        (last === 'L' && stepChar === 'R') ||
+                        (last === 'R' && stepChar === 'L') ||
+                        (last === 'U' && stepChar === 'D') ||
+                        (last === 'D' && stepChar === 'U');
+                    if (isUndo) {
+                        // Kante als zurückgelaufen markieren (zwischen vorherigem und neuem Punkt)
+                        this.markBacktrackedEdge(prevX, prevY, nx, ny);
+                        this.history = this.history.slice(0, -1);
+                        this.moves = Math.max(0, this.moves - 1);
+                    } else {
+                        // Falls diese Kante zuvor zurückgelaufen war: ausgrauung entfernen
+                        this.clearBacktrackedEdge(prevX, prevY, nx, ny);
+                        this.history += stepChar;
+                        this.moves += 1;
+                    }
                     this.needsRender = true;
                 }
             }
@@ -153,6 +178,7 @@ export class Game {
             this.placePlayerAndGoal();
             this.moves = 0;
             this.history = '';
+            this.backtrackedEdges.clear();
             this.saveLevel(this.level);
             this.needsRender = true;
         }
@@ -190,6 +216,28 @@ export class Game {
                 ctx.fillStyle = free ? '#0b0b0b' : '#1f2937';
                 ctx.fillRect(ox + x * size, oy + y * size, size - 1, size - 1);
             }
+        }
+
+        // Bereits zurückgelaufene Kanten dezent hervorheben (unter dem aktuellen Pfad)
+        if (this.backtrackedEdges.size > 0) {
+            ctx.save();
+            ctx.fillStyle = this.backtrackColor;
+            const grayTiles = new Set<string>();
+            for (const key of this.backtrackedEdges) {
+                const [a, b] = key.split('|');
+                const [ax, ay] = a.split(',').map(n => parseInt(n, 10));
+                const [bx, by] = b.split(',').map(n => parseInt(n, 10));
+                const mx = (ax + bx) >> 1;
+                const my = (ay + by) >> 1;
+                grayTiles.add(`${ax},${ay}`);
+                grayTiles.add(`${mx},${my}`);
+                grayTiles.add(`${bx},${by}`);
+            }
+            for (const tile of grayTiles) {
+                const [tx, ty] = tile.split(',').map(n => parseInt(n, 10));
+                ctx.fillRect(ox + tx * size, oy + ty * size, size - 1, size - 1);
+            }
+            ctx.restore();
         }
 
         // Gelaufenen Weg halbtransparent nachzeichnen (aus Historie L/R/U/D vom Spawn aus)
@@ -320,6 +368,7 @@ export class Game {
         this.player.y = this.spawn.y;
         this.moves = 0;
         this.history = '';
+        this.backtrackedEdges.clear();
         this.needsRender = true;
     }
 
@@ -329,6 +378,7 @@ export class Game {
         this.placePlayerAndGoal();
         this.moves = 0;
         this.history = '';
+        this.backtrackedEdges.clear();
         this.saveLevel(this.level);
         this.needsRender = true;
     }
@@ -349,5 +399,21 @@ export class Game {
         } catch {
             return null;
         }
+    }
+
+    // Kanten-ID in kanonischer Form (unabhängig von Laufrichtung)
+    private edgeKey(ax: number, ay: number, bx: number, by: number): string {
+        if (bx < ax || (bx === ax && by < ay)) {
+            return `${bx},${by}|${ax},${ay}`;
+        }
+        return `${ax},${ay}|${bx},${by}`;
+    }
+
+    private markBacktrackedEdge(ax: number, ay: number, bx: number, by: number) {
+        this.backtrackedEdges.add(this.edgeKey(ax, ay, bx, by));
+    }
+
+    private clearBacktrackedEdge(ax: number, ay: number, bx: number, by: number) {
+        this.backtrackedEdges.delete(this.edgeKey(ax, ay, bx, by));
     }
 }
