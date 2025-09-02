@@ -29,7 +29,6 @@ export class Game {
     // Discrete zoom via tile sizes
     private tileSizeIndex = 0;
     private initialTileSizeIndex = 0;
-    private spawn = {x: 1, y: 1};
     private moves = 0;
     private resetLatch = false;
     private history = '';
@@ -186,7 +185,7 @@ export class Game {
         const resetHeld = !this.resetLatch && this.input.isPressed('r', 'R');
         if (resetEdge || resetHeld) {
             this.resetLatch = true;
-            const atStart = this.player.x === this.spawn.x && this.player.y === this.spawn.y;
+            const atStart = this.player.x === 1 && this.player.y === 1;
             if (!atStart) {
                 if (confirm('Level zurücksetzen und zum Start zurückkehren?')) {
                     this.resetToStart();
@@ -326,43 +325,13 @@ export class Game {
     }
 
     private placePlayerAndGoal() {
-        // Start: suche erste freie Zelle nahe (1,1)
+        // Start ist fix bei (1,1), Ziel am Ende des Levels
         const rows = this.laby.height * 2 - 1;
         const cols = this.laby.width * 2 - 1;
-        const isFree = (x: number, y: number) => this.laby.isFree(x, y);
-        // Start bevorzugt ungerade/ungerade (Innenraum)
-        let sx = 1, sy = 1;
-        if (!isFree(sx, sy)) {
-            outer: for (let y = 1; y < rows; y += 2) {
-                for (let x = 1; x < cols; x += 2) {
-                    if (isFree(x, y)) {
-                        sx = x;
-                        sy = y;
-                        break outer;
-                    }
-                }
-            }
-        }
-        this.player.x = sx;
-        this.player.y = sy;
-        this.spawn.x = sx;
-        this.spawn.y = sy;
-
-        // Goal: suche freie Zelle nahe (cols-2, rows-2)
-        let gx = Math.max(1, cols - 2), gy = Math.max(1, rows - 2);
-        if (!isFree(gx, gy)) {
-            outer2: for (let y = rows - 2; y >= 1; y -= 2) {
-                for (let x = cols - 2; x >= 1; x -= 2) {
-                    if (isFree(x, y)) {
-                        gx = x;
-                        gy = y;
-                        break outer2;
-                    }
-                }
-            }
-        }
-        this.goal.x = gx;
-        this.goal.y = gy;
+        this.player.x = 1;
+        this.player.y = 1;
+        this.goal.x = Math.max(1, cols - 2);
+        this.goal.y = Math.max(1, rows - 2);
     }
 
     private canStepTo(cx: number, cy: number, nx: number, ny: number): boolean {
@@ -379,8 +348,8 @@ export class Game {
     }
 
     private resetToStart() {
-        this.player.x = this.spawn.x;
-        this.player.y = this.spawn.y;
+        this.player.x = 1;
+        this.player.y = 1;
         this.moves = 0;
         this.history = '';
         this.levelView.clearHighlights();
