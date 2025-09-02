@@ -3,7 +3,6 @@ export class RandomMersenne {
     m: number[];
 
     constructor(seed: number) {
-        if (seed === undefined) seed = Date.now();
         this.m = new Array(624);
         this.n = 0;
         this.init(seed);

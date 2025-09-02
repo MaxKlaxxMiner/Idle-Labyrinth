@@ -85,7 +85,6 @@ export class Laby {
             }
         }
 
-
         for (let x = 0; x < width - 1; x++) {
             setHWall(setId(x, 0));
             setHWall(setId(x + (height - 1) * width, 0))

@@ -30,29 +30,6 @@ export class Input {
         this.pressed.delete(k);
     }
 
-    axis(): { x: number; y: number } {
-        const left = this.pressed.has('a') || this.pressed.has('ArrowLeft');
-        const right = this.pressed.has('d') || this.pressed.has('ArrowRight');
-        const up = this.pressed.has('w') || this.pressed.has('ArrowUp');
-        const down = this.pressed.has('s') || this.pressed.has('ArrowDown');
-        let x = (right ? 1 : 0) - (left ? 1 : 0);
-        let y = (down ? 1 : 0) - (up ? 1 : 0);
-        if (x !== 0 || y !== 0) {
-            const len = Math.hypot(x, y);
-            x /= len;
-            y /= len;
-        }
-        return {x, y};
-    }
-
-    zoomDelta(): number {
-        let z = 0;
-        if (this.pressed.has('+') || this.pressed.has('=')) z += 1;
-        if (this.pressed.has('-')) z -= 1;
-        if (this.pressed.has('0')) z = Number.NaN; // reset signal
-        return z;
-    }
-
     consumeStepDir(): { dx: number; dy: number } | null {
         // Priority order to make behavior deterministic
         const dirs: Array<[string[], { dx: number; dy: number }]> = [

@@ -11,9 +11,6 @@ export class Game {
     private fgCtx: CanvasRenderingContext2D;
     private rafId: number | null = null;
     private lastTime = 0;
-
-    // Simple state for the idle loop
-    private tickCount = 0;
     private laby!: Laby;
     private levelView!: Level;
     private static readonly BASE_SEED = 123456;
@@ -24,11 +21,10 @@ export class Game {
     // Input and player state
     private input = new Input();
     private level = 0; // gameLevel beginnt bei 0
-    private player = {x: 1, y: 1, r: 0.35, speed: 4.0};
+    private player = {x: 1, y: 1, r: 0.35};
     private goal = {x: 0, y: 0};
     // Discrete zoom via tile sizes
     private tileSizeIndex = 0;
-    private initialTileSizeIndex = 0;
     private moves = 0;
     private resetLatch = false;
     private history = '';
@@ -61,9 +57,7 @@ export class Game {
         window.addEventListener('resize', this.onResize);
         this.onResize();
 
-        // Set initial zoom to best fit based on current canvas size
-        this.initialTileSizeIndex = this.selectInitialTileSizeIndex();
-        this.tileSizeIndex = this.initialTileSizeIndex;
+        this.applyBestFitZoom();
 
         this.placePlayerAndGoal();
         this.moves = 0;
@@ -93,15 +87,11 @@ export class Game {
     }
 
     private update(dt: number) {
-        // Idle tick progression — expand later with resources, upgrades, etc.
-        this.tickCount += 1;
-
         // Zoom controls (managed here)
         const oldIndex = this.tileSizeIndex;
         if (this.input.consumeKey('0')) {
             // Recompute best-fit on demand to respect current canvas size
-            this.initialTileSizeIndex = this.selectInitialTileSizeIndex();
-            this.tileSizeIndex = this.initialTileSizeIndex;
+            this.applyBestFitZoom();
         } else if (this.input.consumeKey('+', '=')) {
             this.tileSizeIndex = Math.min(Consts.zoom.steps.length - 1, this.tileSizeIndex + 1);
         } else if (this.input.consumeKey('-')) {
@@ -199,16 +189,13 @@ export class Game {
         if (!this.input.isPressed('r', 'R')) this.resetLatch = false;
 
         // Goal check
-        const dx = (this.player.x + 0.5) - (this.goal.x + 0.5);
-        const dy = (this.player.y + 0.5) - (this.goal.y + 0.5);
-        if (Math.hypot(dx, dy) < 0.5) {
+        if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
             this.level += 1;
             this.laby = this.createLabyForLevel(this.level);
             this.levelView.setLaby(this.laby);
             this.placePlayerAndGoal();
             // On level up, choose best-fit start zoom
-            this.initialTileSizeIndex = this.selectInitialTileSizeIndex();
-            this.tileSizeIndex = this.initialTileSizeIndex;
+            this.applyBestFitZoom();
             this.moves = 0;
             this.history = '';
             this.levelView.clearHighlights();
@@ -282,14 +269,12 @@ export class Game {
         this.fgCanvas.width = w;
         this.fgCanvas.height = h;
         this.fgCtx.imageSmoothingEnabled = false;
-        // Refresh initial fit index for future '0' resets
-        if (this.laby) {
-            this.initialTileSizeIndex = this.selectInitialTileSizeIndex();
-        }
+        // Adjust zoom to best fit on resize
+        if (this.laby) this.applyBestFitZoom();
         this.needsRender = true;
     }
 
-    private selectInitialTileSizeIndex(): number {
+    private applyBestFitZoom() {
         const steps = Consts.zoom.steps;
         const w = this.canvas.width;
         const h = this.canvas.height;
@@ -299,17 +284,17 @@ export class Game {
         const maxTileH = Math.floor((h - Consts.sizes.basePad * 2) / rows);
         const maxFit = Math.max(Consts.sizes.minTileSize, Math.min(maxTileW, maxTileH));
         const minStart = Consts.zoom.minStartTileSize;
-        // Choose largest step <= maxFit, but not below minStart
         let idx = 0;
-        for (let i = 0; i < steps.length; i++) {
-            if (steps[i] <= maxFit) idx = i;
-        }
+        for (let i = 0; i < steps.length; i++) if (steps[i] <= maxFit) idx = i;
         if (steps[idx] < minStart) {
             for (let i = 0; i < steps.length; i++) {
-                if (steps[i] >= minStart) { idx = i; break; }
+                if (steps[i] >= minStart) {
+                    idx = i;
+                    break;
+                }
             }
         }
-        return idx;
+        this.tileSizeIndex = idx;
     }
 
     private createLabyForLevel(gameLevel: number): Laby {
@@ -341,10 +326,10 @@ export class Game {
         // Ensure stepping by 2 in a cardinal direction
         const dx = nx - cx, dy = ny - cy;
         if (!((Math.abs(dx) === 2 && dy === 0) || (Math.abs(dy) === 2 && dx === 0))) return false;
-        // Intermediate edge must be free and destination cell must be free
+        // Intermediate edge must be free
         const mx = cx + Math.sign(dx);
         const my = cy + Math.sign(dy);
-        return this.laby.isFree(mx, my) && this.laby.isFree(nx, ny);
+        return this.laby.isFree(mx, my);
     }
 
     private resetToStart() {
@@ -354,8 +339,7 @@ export class Game {
         this.history = '';
         this.levelView.clearHighlights();
         // On reset, choose best-fit start zoom
-        this.initialTileSizeIndex = this.selectInitialTileSizeIndex();
-        this.tileSizeIndex = this.initialTileSizeIndex;
+        this.applyBestFitZoom();
         this.needsRender = true;
     }
 
@@ -365,8 +349,7 @@ export class Game {
         this.levelView.setLaby(this.laby);
         this.placePlayerAndGoal();
         // On hard reset, choose best-fit start zoom
-        this.initialTileSizeIndex = this.selectInitialTileSizeIndex();
-        this.tileSizeIndex = this.initialTileSizeIndex;
+        this.applyBestFitZoom();
         this.moves = 0;
         this.history = '';
         this.levelView.clearHighlights();
