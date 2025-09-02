@@ -1,7 +1,7 @@
 export const Consts = {
     colors: {
-        tileFree: '#0b0b0b',
-        tileWall: '#1f2937',
+        background: '#0b0b0b',
+        wall: '#1f2937',
         player: '#fde047',
         goal: '#38bdf8',
         hudText: '#eaeaea',
