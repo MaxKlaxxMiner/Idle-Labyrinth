@@ -26,6 +26,12 @@ export class Game {
     private turbo = false; // false=vsync (RAF), true=Turbo (no-vsync)
     private fastTimer: number | null = null;
 
+    // Camera with dead-zone
+    private camX = 0; // world pixels (center of view)
+    private camY = 0; // world pixels (center of view)
+    private deadFracX = 0.60; // fraction of screen width used as dead-zone
+    private deadFracY = 0.70; // fraction of screen height used as dead-zone
+
     // Input and player state
     private input = new Input();
     private level = 0; // gameLevel beginnt bei 0
@@ -207,6 +213,10 @@ export class Game {
             }
         }
 
+        // Camera dead-zone follow (integer-snapped offsets in render)
+        const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
+        this.updateCamera(size);
+
         // Reset / Hardreset per Taste 'R'
         // Detect reset: prefer edge, but allow first-hold fallback with latch
         const resetEdge = this.input.consumeKey('r', 'R');
@@ -254,14 +264,12 @@ export class Game {
         const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
         const worldW = cols * size;
         const worldH = rows * size;
-        const playerPx = (this.player.x + 0.5) * size;
-        const playerPy = (this.player.y + 0.5) * size;
-        let ox = Math.floor(w / 2 - playerPx);
-        let oy = Math.floor(h / 2 - playerPy);
+        let ox: number;
+        let oy: number;
         if (worldW <= w) ox = Math.floor((w - worldW) / 2);
-        else ox = Math.max(w - worldW, Math.min(0, ox));
+        else ox = Math.floor(w / 2 - this.camX);
         if (worldH <= h) oy = Math.floor((h - worldH) / 2);
-        else oy = Math.max(h - worldH, Math.min(0, oy));
+        else oy = Math.floor(h / 2 - this.camY);
 
         // BG: labyrinth and overlays via Level (uses its edge sets)
         this.levelView.render(ox, oy, size);
@@ -329,6 +337,9 @@ export class Game {
             }
         }
         this.tileSizeIndex = idx;
+        // Center camera on player for this zoom
+        const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
+        this.centerCamera(size);
     }
 
     private createLabyForLevel(gameLevel: number): Laby {
@@ -393,5 +404,64 @@ export class Game {
         } catch {
             return null;
         }
+    }
+
+    // Camera helpers
+    private centerCamera(size: number) {
+        const cols = this.laby.width * 2 - 1;
+        const rows = this.laby.height * 2 - 1;
+        const worldW = cols * size;
+        const worldH = rows * size;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const playerPx = (this.player.x + 0.5) * size;
+        const playerPy = (this.player.y + 0.5) * size;
+        if (worldW <= w) this.camX = worldW / 2; else this.camX = Math.max(w / 2, Math.min(worldW - w / 2, playerPx));
+        if (worldH <= h) this.camY = worldH / 2; else this.camY = Math.max(h / 2, Math.min(worldH - h / 2, playerPy));
+    }
+
+    private updateCamera(size: number) {
+        const cols = this.laby.width * 2 - 1;
+        const rows = this.laby.height * 2 - 1;
+        const worldW = cols * size;
+        const worldH = rows * size;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const playerPx = (this.player.x + 0.5) * size;
+        const playerPy = (this.player.y + 0.5) * size;
+        let changed = false;
+        let targetCamX = this.camX;
+        let targetCamY = this.camY;
+        // Horizontal
+        if (worldW <= w) {
+            targetCamX = worldW / 2;
+        } else {
+            const halfDZx = (w * this.deadFracX) / 2;
+            const left = this.camX - halfDZx;
+            const right = this.camX + halfDZx;
+            if (playerPx < left || playerPx > right) {
+                // Größerer Sprung: auf Achse zentrieren
+                targetCamX = playerPx;
+            }
+            const minX = w / 2, maxX = worldW - w / 2;
+            targetCamX = Math.max(minX, Math.min(maxX, targetCamX));
+        }
+        // Vertical
+        if (worldH <= h) {
+            targetCamY = worldH / 2;
+        } else {
+            const halfDZy = (h * this.deadFracY) / 2;
+            const top = this.camY - halfDZy;
+            const bottom = this.camY + halfDZy;
+            if (playerPy < top || playerPy > bottom) {
+                // Größerer Sprung: auf Achse zentrieren
+                targetCamY = playerPy;
+            }
+            const minY = h / 2, maxY = worldH - h / 2;
+            targetCamY = Math.max(minY, Math.min(maxY, targetCamY));
+        }
+        if (targetCamX !== this.camX) { this.camX = targetCamX; changed = true; }
+        if (targetCamY !== this.camY) { this.camY = targetCamY; changed = true; }
+        if (changed) this.needsRender = true;
     }
 }
