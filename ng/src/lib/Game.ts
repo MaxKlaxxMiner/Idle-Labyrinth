@@ -10,13 +10,17 @@ export class Game {
     private fgCanvas: HTMLCanvasElement;
     private fgCtx: CanvasRenderingContext2D;
     private rafId: number | null = null;
-    private lastTime = 0;
     private laby!: Laby;
     private levelView!: Level;
     private static readonly BASE_SEED = 123456;
 
     // Render invalidation
     private needsRender = true;
+
+    // FPS counter
+    private fpsFrames = 0;
+    private fpsLastTime = performance.now();
+    private fpsValue = 0;
 
     // Input and player state
     private input = new Input();
@@ -58,11 +62,21 @@ export class Game {
 
     start() {
         if (this.rafId != null) return;
-        this.lastTime = performance.now();
-        const loop = (t: number) => {
-            const dt = Math.min(1, (t - this.lastTime) / 1000);
-            this.lastTime = t;
-            this.update(dt);
+        const loop = () => {
+            this.update();
+
+            // FPS accounting
+            this.fpsFrames++;
+            const now = performance.now();
+            const dt = now - this.fpsLastTime;
+            if (dt >= 1000) {
+                this.fpsValue = Math.round((this.fpsFrames * 1000) / dt);
+                this.fpsFrames = 0;
+                this.fpsLastTime = now;
+                this.needsRender = true; // ensure HUD refresh on tick
+            }
+
+            this.needsRender = true; // Speed Test
             if (this.needsRender) {
                 this.render();
                 this.needsRender = false;
@@ -77,7 +91,7 @@ export class Game {
         this.rafId = null;
     }
 
-    private update(dt: number) {
+    private update() {
         // Zoom controls (managed here)
         const oldIndex = this.tileSizeIndex;
         if (this.input.consumeKey('0')) {
@@ -229,16 +243,12 @@ export class Game {
             this.fgCtx.fill();
         }
 
-        // HUD (foreground)
+        // HUD (foreground) - single line
         this.fgCtx.fillStyle = Consts.colors.hudText;
         this.fgCtx.font = Consts.sizes.hudFont;
         this.fgCtx.textBaseline = 'top';
-        const lines = [
-            `Level: ${this.level + 1}  Moves: ${this.moves}`,
-            `Tile: ${size}px  (+ / - , 0 fit)`,
-            `Move: WASD/↑↓←→  Ziel: Blaues Feld  Reset: R`,
-        ];
-        for (let i = 0; i < lines.length; i++) this.fgCtx.fillText(lines[i], 8, 8 + i * 14);
+        const hudLine = `Level: ${this.level + 1}  Moves: ${this.moves}  |  Tile: ${size}px (+/- , 0 fit)  |  Move: WASD/↑↓←→  Reset: R  |  FPS: ${this.fpsValue}`;
+        this.fgCtx.fillText(hudLine, 8, 8);
     }
 
     private onResize() {
