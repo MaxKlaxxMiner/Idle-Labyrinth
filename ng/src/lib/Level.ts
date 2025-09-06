@@ -19,7 +19,6 @@ export class Level {
         if (!ctx) throw new Error('Canvas 2D Context (bg) nicht verfügbar');
         this.ctx = ctx;
         this.ctx.imageSmoothingEnabled = false;
-        // Use the free-tile color as canvas background to avoid painting free tiles per frame
         this.canvas.style.backgroundColor = Consts.colors.background;
     }
 
