@@ -22,6 +22,10 @@ export class Game {
     private fpsLastTime = performance.now();
     private fpsValue = 0;
 
+    // Render mode
+    private turbo = false; // false=vsync (RAF), true=Turbo (no-vsync)
+    private fastTimer: number | null = null;
+
     // Input and player state
     private input = new Input();
     private level = 0; // gameLevel beginnt bei 0
@@ -61,10 +65,25 @@ export class Game {
     }
 
     start() {
-        if (this.rafId != null) return;
+        if (this.rafId != null || this.fastTimer != null) return;
+        if (this.turbo) this.startTurboLoop(); else this.startRafLoop();
+    }
+
+    stop() {
+        if (this.rafId != null) cancelAnimationFrame(this.rafId);
+        this.rafId = null;
+        if (this.fastTimer != null) { clearTimeout(this.fastTimer); clearInterval(this.fastTimer); }
+        this.fastTimer = null;
+    }
+
+    private startRafLoop() {
         const loop = () => {
             this.update();
-
+            // VSync-Modus: nur rendern, wenn invalidiert
+            if (this.needsRender) {
+                this.render();
+                this.needsRender = false;
+            }
             // FPS accounting
             this.fpsFrames++;
             const now = performance.now();
@@ -73,22 +92,36 @@ export class Game {
                 this.fpsValue = Math.round((this.fpsFrames * 1000) / dt);
                 this.fpsFrames = 0;
                 this.fpsLastTime = now;
-                this.needsRender = true; // ensure HUD refresh on tick
-            }
-
-            this.needsRender = true; // Speed Test
-            if (this.needsRender) {
-                this.render();
-                this.needsRender = false;
+                this.needsRender = true; // HUD-Aktualisierung
             }
             this.rafId = requestAnimationFrame(loop);
         };
         this.rafId = requestAnimationFrame(loop);
     }
 
-    stop() {
-        if (this.rafId != null) cancelAnimationFrame(this.rafId);
-        this.rafId = null;
+    private startTurboLoop() {
+        const loop = () => {
+            // Einmal Game-Update pro Intervall-Tick
+            this.update();
+            // Burst‑Rendering bis mindestens 10 ms vergangen sind (Speed‑Test)
+            const minTime = performance.now() + 10;
+            do {
+                this.render();
+                this.fpsFrames++;
+            } while (performance.now() < minTime);
+            // FPS accounting
+            const now = performance.now();
+            const dt = now - this.fpsLastTime;
+            if (dt >= 1000) {
+                this.fpsValue = Math.round((this.fpsFrames * 1000) / dt);
+                this.fpsFrames = 0;
+                this.fpsLastTime = now;
+            }
+        };
+        // setInterval ausprobieren (kann in einigen Situationen weniger geclamped sein)
+        this.fastTimer = window.setInterval(loop, 0);
+        // Sofort einen Tick ausführen, damit es direkt losgeht
+        loop();
     }
 
     private update() {
@@ -193,6 +226,14 @@ export class Game {
         }
         if (!this.input.isPressed('r', 'R')) this.resetLatch = false;
 
+        // Toggle Turbo (no-vsync) per Taste 'T'
+        if (this.input.consumeKey('t', 'T')) {
+            this.turbo = !this.turbo;
+            // sanfter Loop-Wechsel
+            setTimeout(() => { this.stop(); this.start(); }, 0);
+            this.needsRender = true;
+        }
+
         // Goal check
         if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
             this.level += 1;
@@ -247,7 +288,8 @@ export class Game {
         this.fgCtx.fillStyle = Consts.colors.hudText;
         this.fgCtx.font = Consts.sizes.hudFont;
         this.fgCtx.textBaseline = 'top';
-        const hudLine = `Level: ${this.level + 1}  Moves: ${this.moves}  |  Tile: ${size}px (+/- , 0 fit)  |  Move: WASD/↑↓←→  Reset: R  |  FPS: ${this.fpsValue}`;
+        const mode = this.turbo ? 'Turbo' : 'VSync';
+        const hudLine = `Level: ${this.level + 1}  Moves: ${this.moves}  |  Tile: ${size}px (+/- , 0 fit)  |  Move: WASD/↑↓←→  Reset: R  |  Mode: ${mode} (T)  |  FPS: ${this.fpsValue}`;
         this.fgCtx.fillText(hudLine, 8, 8);
     }
 
