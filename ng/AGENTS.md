@@ -23,3 +23,9 @@ Dieser Leitfaden beschreibt, wie Beiträge in diesem Projekt erfolgen sollen.
 - Autor: Username `codex`, E‑Mail: keine.
 - Commit‑Nachrichten: müssen mit `laby: ` beginnen.
 - Zeitpunkt: Commits erst, nachdem die stabile Funktionsweise der Anpassung direkt oder indirekt bestätigt wurde. Gut platzierte Commits sind dann jederzeit erlaubt.
+
+### Identität/Authoring
+- Es wird keine Git‑Repo‑Konfiguration für Name/E‑Mail gesetzt oder verändert.
+- Agent‑Commits verwenden eine per‑Commit Identität, z. B.:
+  - `git -c user.name="codex" -c user.email="" commit -m "laby: <message>" --author="codex <>"`
+- Eigene Commits des Maintainers nutzen weiterhin dessen persönliche/Globale Git‑Konfiguration.
