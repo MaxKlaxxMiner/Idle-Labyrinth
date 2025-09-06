@@ -10,14 +10,14 @@ export class Level {
     private pixCanvas: HTMLCanvasElement | null = null;
     private pixCtx: CanvasRenderingContext2D | null = null;
     private imgData: ImageData | null = null;
+    private u32: Uint32Array | null = null;
     private pixW = 0;
     private pixH = 0;
-
-    // Highlight state managed by Level (store cells instead of edges)
-    // We keep counts per cell so overlapping edges don't get lost on removal
-    // Key = direkter Pixelindex im Uint32-Buffer: p = y * pixW + x
-    private historyCells = new Map<number, number>();
-    private backtrackedCells = new Map<number, number>();
+    // Farbcache (gepackte Uint32‑Werte)
+    private bg32 = 0;
+    private wall32 = 0;
+    private trail32 = 0;
+    private back32 = 0;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -42,7 +42,15 @@ export class Level {
         this.pixCanvas = c;
         this.pixCtx = pctx;
         this.imgData = pctx.createImageData(this.pixW, this.pixH);
-        // Highlights zurücksetzen, um Inkonsistenzen zu vermeiden
+        this.u32 = new Uint32Array(this.imgData.data.buffer, 0, this.pixW * this.pixH);
+        // Debug-Ausgabe: Pixelabmessungen des Labyrinths
+        console.log(`Level: Bitmap-Größe ${this.pixW} x ${this.pixH} Pixel`);
+        // Farben einmalig packen
+        this.bg32 = this.parseColor(Consts.colors.background);
+        this.wall32 = this.parseColor(Consts.colors.wall);
+        this.trail32 = this.parseColor(Consts.colors.trail);
+        this.back32 = this.parseColor(Consts.colors.backtrack);
+        // Komplett neu zeichnen (inkl. Startpunkt)
         this.clearHighlights();
     }
 
@@ -52,38 +60,30 @@ export class Level {
         this.ctx.imageSmoothingEnabled = false;
     }
 
-    // Tile/Path memory API
+    // Tile/Path API (direkter Pixeleingriff)
     clearHighlights() {
-        this.historyCells.clear();
-        this.backtrackedCells.clear();
+        this.drawBase();
         this.markCell(1, 1, true); // Startfeld pauschal markieren
     }
 
     markCell(x: number, y: number, history: boolean) {
-        this.incCell(history ? this.historyCells : this.backtrackedCells, x, y);
+        if (!this.u32) return;
+        const p = this.cellKey(x, y);
+        if (p < 0) return;
+        this.u32[p] = history ? this.trail32 : this.back32;
     }
 
     clearCell(x: number, y: number, history: boolean) {
-        this.decCell(history ? this.historyCells : this.backtrackedCells, x, y);
+        if (!this.u32) return;
+        const p = this.cellKey(x, y);
+        if (p < 0) return;
+        this.u32[p] = this.laby.isFree(x, y) ? this.bg32 : this.wall32;
     }
 
     private cellKey(x: number, y: number): number {
         if (this.pixW <= 0 || this.pixH <= 0) return -1;
         if (x < 0 || y < 0 || x >= this.pixW || y >= this.pixH) return -1;
         return y * this.pixW + x;
-    }
-
-    private incCell(map: Map<number, number>, x: number, y: number) {
-        const k = this.cellKey(x, y);
-        if (k < 0) return; // ungültig ignorieren
-        map.set(k, (map.get(k) || 0) + 1);
-    }
-
-    private decCell(map: Map<number, number>, x: number, y: number) {
-        const k = this.cellKey(x, y);
-        if (k < 0) return; // ungültig ignorieren
-        const v = (map.get(k) || 0) - 1;
-        if (v > 0) map.set(k, v); else map.delete(k);
     }
 
     // Draw labyrinth + overlays in 1px-Bitmap und anschließend skaliert blitten
@@ -93,34 +93,22 @@ export class Level {
         this.ctx.clearRect(0, 0, w, h);
 
         if (!this.pixCtx || !this.imgData) return;
-
-        const cols = this.pixW;
-        const rows = this.pixH;
-        // Palette vorbereiten (direkt als Uint32-Pixelwerte)
-        const bg32 = this.parseColor(Consts.colors.background);
-        const wall32 = this.parseColor(Consts.colors.wall);
-        const trail32 = this.parseColor(Consts.colors.trail);
-        const back32 = this.parseColor(Consts.colors.backtrack);
-
-        const u32 = new Uint32Array(this.imgData.data.buffer, 0, (rows * cols));
-
-        // Grundbild: freie Felder = Hintergrund, Wände = wall
-        let idx = 0;
-        for (let y = 0; y < rows; y++) {
-            for (let x = 0; x < cols; x++) {
-                const free = this.laby.isFree(x, y);
-                u32[idx++] = free ? bg32 : wall32;
-            }
-        }
-
-        // Overlays (trail + backtrack) direkt setzen per Pixelindex (keine Boundschecks nötig)
-        for (const p of this.historyCells.keys()) u32[p] = trail32;
-        for (const p of this.backtrackedCells.keys()) u32[p] = back32;
-
-        // Auf Pixel-Canvas schreiben und skaliert blitten
+        // Auf Pixel-Canvas schreiben und skaliert blitten (keine Schleifen hier)
         this.pixCtx.putImageData(this.imgData, 0, 0);
         this.ctx.imageSmoothingEnabled = false;
-        this.ctx.drawImage(this.pixCanvas!, 0, 0, cols, rows, ox, oy, cols * tileSize, rows * tileSize);
+        this.ctx.drawImage(this.pixCanvas!, 0, 0, this.pixW, this.pixH, ox, oy, this.pixW * tileSize, this.pixH * tileSize);
+    }
+
+    // Grundbild (Labyrinth ohne Overlays) in das U32‑Abbild schreiben
+    private drawBase() {
+        if (!this.u32) return;
+        let idx = 0;
+        for (let y = 0; y < this.pixH; y++) {
+            for (let x = 0; x < this.pixW; x++) {
+                const free = this.laby.isFree(x, y);
+                this.u32[idx++] = free ? this.bg32 : this.wall32;
+            }
+        }
     }
 
     // '#rrggbb' oder 'rgba(r,g,b,a)' → packed Uint32 (Endianness berücksichtigt)
