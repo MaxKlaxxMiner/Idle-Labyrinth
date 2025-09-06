@@ -97,6 +97,29 @@ export class Level {
         this.pixCtx.putImageData(this.imgData, 0, 0);
         this.ctx.imageSmoothingEnabled = false;
         this.ctx.drawImage(this.pixCanvas!, 0, 0, this.pixW, this.pixH, ox, oy, this.pixW * tileSize, this.pixH * tileSize);
+
+        // Gaps (1px) zwischen den Zellen/NODES optional überlagern
+        if (tileSize >= Consts.sizes.gapThreshold) {
+            this.drawGaps(ox, oy, tileSize);
+        }
+    }
+
+    // Zeichnet 1px-Linien in Hintergrundfarbe zwischen allen Zellen (sichtbare Abstände)
+    private drawGaps(ox: number, oy: number, tileSize: number) {
+        const ctx = this.ctx;
+        const totalW = this.pixW * tileSize;
+        const totalH = this.pixH * tileSize;
+        ctx.fillStyle = Consts.colors.background;
+        // Vertikale Gaps
+        for (let x = 1; x < this.pixW; x++) {
+            const dx = ox + x * tileSize;
+            ctx.fillRect(dx, oy, 1, totalH);
+        }
+        // Horizontale Gaps
+        for (let y = 1; y < this.pixH; y++) {
+            const dy = oy + y * tileSize;
+            ctx.fillRect(ox, dy, totalW, 1);
+        }
     }
 
     // Grundbild (Labyrinth ohne Overlays) in das U32‑Abbild schreiben

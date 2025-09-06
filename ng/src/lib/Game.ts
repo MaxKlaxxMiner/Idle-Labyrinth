@@ -285,7 +285,8 @@ export class Game {
             this.fgCtx.fillRect(ox + this.player.x * size, oy + this.player.y * size, size, size);
         } else {
             this.fgCtx.beginPath();
-            this.fgCtx.arc(ox + (this.player.x + 0.5) * size, oy + (this.player.y + 0.5) * size, this.player.r * size, 0, Math.PI * 2);
+            // Subpixel-Shift um 0.5px für optische Zentrierung
+            this.fgCtx.arc(ox + (this.player.x + 0.5) * size + 0.5, oy + (this.player.y + 0.5) * size + 0.5, this.player.r * size, 0, Math.PI * 2);
             this.fgCtx.fill();
         }
 

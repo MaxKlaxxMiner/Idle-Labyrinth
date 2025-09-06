@@ -30,7 +30,7 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 3) Rendering (Canvas 2D)
 - Verwendet expandierte Maße aus `Laby`: `pixWidth = w*2-1`, `pixHeight = h*2-1` (Consumer rechnen nicht selbst, sondern lesen diese Properties).
 - Kachelgröße aus Canvas-Dimensionen, Zoomfaktor und Padding bestimmt; Kamera folgt dem Spieler und wird bei kleinen Labyrinthen zentriert/geclamped.
-- Wände/Durchgänge über `Laby.isFree(x,y)`: freie Flächen dunkel, Wände etwas heller; Ziel blau, Spieler gelb (Kreis). Gelaufener Weg wird aus `history` rekonstruiert (Startknoten, Kanten und Zielknoten je Schritt) und halbtransparent gelb übermalt.
+- Wände/Durchgänge über `Laby.isFree(x,y)`: freie Flächen dunkel, Wände etwas heller; Ziel blau, Spieler gelb (Kreis). Gelaufener Weg wird aus `history` rekonstruiert (Startknoten, Kanten und Zielknoten je Schritt) und halbtransparent gelb übermalt. Ab `tileSize >= sizes.gapThreshold` werden 1px‑„Gaps“ zwischen den expandierten Zellen als Overlay in Hintergrundfarbe gezeichnet (ohne zusätzliche Offscreen‑Berechnung), sodass zwischen Nodes/Kanten sichtbare Abstände entstehen.
 - HUD (Level, Moves, Steuerhilfe) oben links.
 - Resize passt Auflösung an `devicePixelRatio` (max. 2) an; `imageSmoothing` ist aus.
 
