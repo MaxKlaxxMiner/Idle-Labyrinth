@@ -45,24 +45,15 @@ export class Game {
         if (!fgCtx) throw new Error('Canvas 2D Context (fg) nicht verfügbar');
         this.fgCanvas = fg;
         this.fgCtx = fgCtx;
+        this.levelView = new Level(this.canvas);
 
-        // Level aus LocalStorage laden (optional)
         const saved = this.loadLevel();
         this.level = Number.isFinite(saved) && saved! >= 0 ? saved! : 0;
-        // Initial maze + Level-View
-        this.laby = this.createLabyForLevel(this.level);
-        this.levelView = new Level(this.canvas, this.laby);
+        this.initLevel();
 
         this.onResize = this.onResize.bind(this);
         window.addEventListener('resize', this.onResize);
         this.onResize();
-
-        this.applyBestFitZoom();
-
-        this.placePlayerAndGoal();
-        this.moves = 0;
-        this.history = '';
-        this.needsRender = true;
     }
 
     start() {
@@ -112,10 +103,10 @@ export class Game {
                 const nx = this.player.x + dx * 2;
                 const ny = this.player.y + dy * 2;
                 if (this.canStepTo(this.player.x, this.player.y, nx, ny)) {
-                    // Kante als zurückgelaufen markieren
-                    this.markBacktrackedEdge(this.player.x, this.player.y, nx, ny);
-                    // History-Kante entfernen
-                    this.levelView.clearHistoryEdge(this.player.x, this.player.y, nx, ny);
+                    this.levelView.clearCell(nx - dx * 2, ny - dy * 2, true);
+                    this.levelView.clearCell(nx - dx, ny - dy, true);
+                    this.levelView.markCell(nx - dx * 2, ny - dy * 2, false);
+                    this.levelView.markCell(nx - dx, ny - dy, false);
                     this.player.x = nx;
                     this.player.y = ny;
                     this.moves = Math.max(0, this.moves - 1);
@@ -150,17 +141,17 @@ export class Game {
                         (last === 'U' && stepChar === 'D') ||
                         (last === 'D' && stepChar === 'U');
                     if (isUndo) {
-                        // Kante als zurückgelaufen markieren (zwischen vorherigem und neuem Punkt)
-                        this.markBacktrackedEdge(prevX, prevY, nx, ny);
-                        // History-Kante entfernen
-                        this.levelView.clearHistoryEdge(prevX, prevY, nx, ny);
+                        this.levelView.clearCell(nx - step.dx, ny - step.dy, true);
+                        this.levelView.clearCell(prevX, prevY, true);
+                        this.levelView.markCell(nx - step.dx, ny - step.dy, false);
+                        this.levelView.markCell(prevX, prevY, false);
                         this.history = this.history.slice(0, -1);
                         this.moves = Math.max(0, this.moves - 1);
                     } else {
-                        // Falls diese Kante zuvor zurückgelaufen war: ausgrauung entfernen
-                        this.clearBacktrackedEdge(prevX, prevY, nx, ny);
-                        // History-Kante hinzufügen
-                        this.levelView.markHistoryEdge(prevX, prevY, nx, ny);
+                        this.levelView.clearCell(nx - step.dx, ny - step.dy, false);
+                        this.levelView.clearCell(nx, ny, false);
+                        this.levelView.markCell(nx - step.dx, ny - step.dy, true);
+                        this.levelView.markCell(nx, ny, true);
                         this.history += stepChar;
                         this.moves += 1;
                     }
@@ -178,7 +169,7 @@ export class Game {
             const atStart = this.player.x === 1 && this.player.y === 1;
             if (!atStart) {
                 if (confirm('Level zurücksetzen und zum Start zurückkehren?')) {
-                    this.resetToStart();
+                    this.initLevel();
                 }
             } else {
                 if (confirm('HARDRESET: gesamtes Spiel zurücksetzen (Level 1) ?')) {
@@ -191,16 +182,8 @@ export class Game {
         // Goal check
         if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
             this.level += 1;
-            this.laby = this.createLabyForLevel(this.level);
-            this.levelView.setLaby(this.laby);
-            this.placePlayerAndGoal();
-            // On level up, choose best-fit start zoom
-            this.applyBestFitZoom();
-            this.moves = 0;
-            this.history = '';
-            this.levelView.clearHighlights();
             this.saveLevel(this.level);
-            this.needsRender = true;
+            this.initLevel();
         }
     }
 
@@ -214,7 +197,6 @@ export class Game {
         const cols = this.laby.width * 2 - 1;
         const rows = this.laby.height * 2 - 1;
         const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
-        const drawSize = size >= Consts.sizes.gapThreshold ? (size - 1) : size;
         const worldW = cols * size;
         const worldH = rows * size;
         const playerPx = (this.player.x + 0.5) * size;
@@ -305,18 +287,7 @@ export class Game {
         for (let i = 0; i < gameLevel; i++) {
             if (w / h < 1.61803399) w += 2; else h += 2;
         }
-        // Seed nach Vorgabe: BASE_SEED + w + h + gameLevel
         return new Laby(w, h, Game.BASE_SEED + w + h + gameLevel);
-    }
-
-    private placePlayerAndGoal() {
-        // Start ist fix bei (1,1), Ziel am Ende des Levels
-        const rows = this.laby.height * 2 - 1;
-        const cols = this.laby.width * 2 - 1;
-        this.player.x = 1;
-        this.player.y = 1;
-        this.goal.x = Math.max(1, cols - 2);
-        this.goal.y = Math.max(1, rows - 2);
     }
 
     private canStepTo(cx: number, cy: number, nx: number, ny: number): boolean {
@@ -332,29 +303,26 @@ export class Game {
         return this.laby.isFree(mx, my);
     }
 
-    private resetToStart() {
-        this.player.x = 1;
-        this.player.y = 1;
+    private initLevel() {
+        this.laby = this.createLabyForLevel(this.level);
+
         this.moves = 0;
         this.history = '';
+        this.player.x = 1;
+        this.player.y = 1;
+        this.goal.x = Math.max(1, this.laby.width * 2 - 3);
+        this.goal.y = Math.max(1, this.laby.height * 2 - 3);
+
+        this.levelView.setLaby(this.laby);
         this.levelView.clearHighlights();
-        // On reset, choose best-fit start zoom
         this.applyBestFitZoom();
         this.needsRender = true;
     }
 
     private hardReset() {
         this.level = 0;
-        this.laby = this.createLabyForLevel(this.level);
-        this.levelView.setLaby(this.laby);
-        this.placePlayerAndGoal();
-        // On hard reset, choose best-fit start zoom
-        this.applyBestFitZoom();
-        this.moves = 0;
-        this.history = '';
-        this.levelView.clearHighlights();
         this.saveLevel(this.level);
-        this.needsRender = true;
+        this.initLevel();
     }
 
     private saveLevel(level: number) {
@@ -373,13 +341,5 @@ export class Game {
         } catch {
             return null;
         }
-    }
-
-    private markBacktrackedEdge(ax: number, ay: number, bx: number, by: number) {
-        this.levelView.markBacktrackedEdge(ax, ay, bx, by);
-    }
-
-    private clearBacktrackedEdge(ax: number, ay: number, bx: number, by: number) {
-        this.levelView.clearBacktrackedEdge(ax, ay, bx, by);
     }
 }
