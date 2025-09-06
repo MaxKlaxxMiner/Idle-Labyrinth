@@ -23,19 +23,19 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 - Eingabe: `Input.consumeStepDir()` liefert pro Tastendruck genau einen Schritt (Determinismus durch Prioritätsreihenfolge). `zoomDelta()` steuert Zoom; `consumeKey('r')` für Reset (Edge-getriggert). Zusätzlich Latch-Logik für gehaltenes „R“.
 - Undo: `Backspace`/`Delete` macht den letzten Schritt rückgängig (Autorepeat funktioniert über wiederholte `keydown`-Events; `Input.consumeKey()` verarbeitet diese).
 - Levelgröße wächst über eine einfache Heuristik (Start 5x5, Zuwachs um 2, Verhältnis nähert goldenen Schnitt an). Seed: `BASE_SEED + w + h + level`.
-- Spawn/Goal: Sucht jeweils die nächste freie Innenzelle nahe (1,1) bzw. (cols-2, rows-2).
+- Spawn/Goal: Sucht jeweils die nächste freie Innenzelle nahe (1,1) bzw. (pixWidth-2, pixHeight-2).
 - Persistenz: Speichert `level` in `localStorage` unter `idle-laby-level`.
 - Pfad-Historie: `history: string`, speichert Bewegungen als Zeichenfolge aus `L/R/U/D`. Beim Vorwärtsgehen wird ein Zeichen angehängt; beim Undo entfernt.
 
 3) Rendering (Canvas 2D)
-- Errechnet expandiertes Grid (`cols = w*2-1`, `rows = h*2-1`).
+- Verwendet expandierte Maße aus `Laby`: `pixWidth = w*2-1`, `pixHeight = h*2-1` (Consumer rechnen nicht selbst, sondern lesen diese Properties).
 - Kachelgröße aus Canvas-Dimensionen, Zoomfaktor und Padding bestimmt; Kamera folgt dem Spieler und wird bei kleinen Labyrinthen zentriert/geclamped.
 - Wände/Durchgänge über `Laby.isFree(x,y)`: freie Flächen dunkel, Wände etwas heller; Ziel blau, Spieler gelb (Kreis). Gelaufener Weg wird aus `history` rekonstruiert (Startknoten, Kanten und Zielknoten je Schritt) und halbtransparent gelb übermalt.
 - HUD (Level, Moves, Steuerhilfe) oben links.
 - Resize passt Auflösung an `devicePixelRatio` (max. 2) an; `imageSmoothing` ist aus.
 
 4) Labyrinth (`Laby`)
-- Interne Repräsentation im Zellenraster (komprimiert), Ausgabe über expandiertes Raster (`w*2-1` x `h*2-1`).
+- Interne Repräsentation im Zellenraster (komprimiert), Ausgabe über expandiertes Raster (`pixWidth` x `pixHeight`, intern `w*2-1` x `h*2-1`).
 - `isFree(x,y)` liefert für Knoten/Kanten/Zellen, ob begehbar ist; Intersections (gerade/gerade) sind Wände.
 - Generator baut deterministisch anhand `seed` ein zusammenhängendes Labyrinth.
 

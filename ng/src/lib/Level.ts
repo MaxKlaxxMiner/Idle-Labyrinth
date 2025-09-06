@@ -30,9 +30,9 @@ export class Level {
 
     setLaby(laby: Laby) {
         this.laby = laby;
-        // Bitmap gemäß Zellenmaß (w*2-1 x h*2-1) anlegen/erneuern
-        this.pixW = this.laby.width * 2 - 1;
-        this.pixH = this.laby.height * 2 - 1;
+        // Bitmap gemäß Laby‑Pixelmaßen (pixWidth x pixHeight) anlegen/erneuern
+        this.pixW = this.laby.pixWidth;
+        this.pixH = this.laby.pixHeight;
         const c = document.createElement('canvas');
         c.width = this.pixW;
         c.height = this.pixH;

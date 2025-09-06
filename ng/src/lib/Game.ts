@@ -246,7 +246,7 @@ export class Game {
 
         // Goal check
         if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
-            this.level += 1;
+            this.level++;
             this.saveLevel(this.level);
             this.initLevel();
         }
@@ -258,12 +258,9 @@ export class Game {
         // FG: Overlays
         this.fgCtx.clearRect(0, 0, w, h);
 
-        // Grid sizing + camera (computed here)
-        const cols = this.laby.width * 2 - 1;
-        const rows = this.laby.height * 2 - 1;
         const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
-        const worldW = cols * size;
-        const worldH = rows * size;
+        const worldW = this.laby.pixWidth * size;
+        const worldH = this.laby.pixHeight * size;
         let ox: number;
         let oy: number;
         if (worldW <= w) ox = Math.floor((w - worldW) / 2);
@@ -320,10 +317,8 @@ export class Game {
         const steps = Consts.zoom.steps;
         const w = this.canvas.width;
         const h = this.canvas.height;
-        const cols = this.laby.width * 2 - 1;
-        const rows = this.laby.height * 2 - 1;
-        const maxTileW = Math.floor((w - Consts.sizes.basePad * 2) / cols);
-        const maxTileH = Math.floor((h - Consts.sizes.basePad * 2) / rows);
+        const maxTileW = Math.floor((w - Consts.sizes.basePad * 2) / this.laby.pixWidth);
+        const maxTileH = Math.floor((h - Consts.sizes.basePad * 2) / this.laby.pixHeight);
         const maxFit = Math.max(Consts.sizes.minTileSize, Math.min(maxTileW, maxTileH));
         const minStart = Consts.zoom.minStartTileSize;
         let idx = 0;
@@ -354,9 +349,7 @@ export class Game {
     }
 
     private canStepTo(cx: number, cy: number, nx: number, ny: number): boolean {
-        const rows = this.laby.height * 2 - 1;
-        const cols = this.laby.width * 2 - 1;
-        if (nx < 1 || ny < 1 || nx >= cols - 1 || ny >= rows - 1) return false;
+        if (nx < 1 || ny < 1 || nx >= this.laby.pixWidth - 1 || ny >= this.laby.pixHeight - 1) return false;
         // Ensure stepping by 2 in a cardinal direction
         const dx = nx - cx, dy = ny - cy;
         if (!((Math.abs(dx) === 2 && dy === 0) || (Math.abs(dy) === 2 && dx === 0))) return false;
@@ -373,8 +366,8 @@ export class Game {
         this.history = '';
         this.player.x = 1;
         this.player.y = 1;
-        this.goal.x = Math.max(1, this.laby.width * 2 - 3);
-        this.goal.y = Math.max(1, this.laby.height * 2 - 3);
+        this.goal.x = Math.max(1, this.laby.pixWidth - 2);
+        this.goal.y = Math.max(1, this.laby.pixHeight - 2);
 
         this.levelView.setLaby(this.laby);
         this.levelView.clearHighlights();
@@ -408,10 +401,8 @@ export class Game {
 
     // Camera helpers
     private centerCamera(size: number) {
-        const cols = this.laby.width * 2 - 1;
-        const rows = this.laby.height * 2 - 1;
-        const worldW = cols * size;
-        const worldH = rows * size;
+        const worldW = this.laby.pixWidth * size;
+        const worldH = this.laby.pixHeight * size;
         const w = this.canvas.width;
         const h = this.canvas.height;
         const playerPx = (this.player.x + 0.5) * size;
@@ -421,10 +412,8 @@ export class Game {
     }
 
     private updateCamera(size: number) {
-        const cols = this.laby.width * 2 - 1;
-        const rows = this.laby.height * 2 - 1;
-        const worldW = cols * size;
-        const worldH = rows * size;
+        const worldW = this.laby.pixWidth * size;
+        const worldH = this.laby.pixHeight * size;
         const w = this.canvas.width;
         const h = this.canvas.height;
         const playerPx = (this.player.x + 0.5) * size;

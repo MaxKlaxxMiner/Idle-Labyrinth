@@ -44,7 +44,7 @@ Ein leichtgewichtiges Gerüst für ein webbasiertes Idle-/Labyrinth-Spiel. Imple
 - `src/` – TypeScript-Quellcode
   - `index.ts` – Bootstrapping (Canvas finden, `Game` starten)
   - `lib/Game.ts` – Game-Loop, Eingabe, Kamera/Zoom, Rendering, Level-Logik
-  - `lib/Laby.ts` – Labyrinth-Generator (deterministisch, seed-basiert), sowie `isFree(x,y)`-Abfrage im expandierten Grid
+- `lib/Laby.ts` – Labyrinth-Generator (deterministisch, seed-basiert), `isFree(x,y)` im expandierten Grid und bereitgestellte Maße `pixWidth`/`pixHeight`.
   - `lib/Input.ts` – Tastatureingaben (gedebouncte Richtungs-Schritte, Zoom, Reset)
   - `lib/Random.ts` – Zufallshelfer (Mersenne Twister / leichter LCG)
   - `styles.css` – Basis-Styling für HUD/Canvas
@@ -56,7 +56,7 @@ Ein leichtgewichtiges Gerüst für ein webbasiertes Idle-/Labyrinth-Spiel. Imple
 ## Technische Details
 
 - Rendering: 2D-Canvas mit einfacher Kachel-/Kantenzeichnung; Kamera folgt dem Spieler, Clamping bei kleinen Labyrinthen. Gelaufene Wege werden aus der `L/R/U/D`-Historie rekonstruiert und halbtransparent eingefärbt.
-- Grid: Internes Zellenraster wird auf ein „expandiertes“ Raster (`w*2-1` x `h*2-1`) abgebildet. `Laby.isFree(x,y)` signalisiert, ob eine Zelle/ Kante begehbar ist.
+- Grid: Internes Zellenraster wird auf ein „expandiertes“ Raster (`pixWidth` x `pixHeight`, intern `w*2-1` x `h*2-1`) abgebildet. `Laby` stellt `pixWidth`/`pixHeight` bereit; Consumer berechnen diese nicht selbst. `Laby.isFree(x,y)` signalisiert, ob eine Zelle/Kante begehbar ist.
 - Generator: `Laby` erzeugt per seed deterministische Labyrinthe; Levelgröße wächst abhängig vom Verhältnis (nähert den goldenen Schnitt an).
 - Eingabe: `Input.consumeStepDir()` liefert pro Tastendruck genau einen diskreten Schritt; `zoomDelta()` und `consumeKey()` steuern Zoom/Reset.
 - Persistenz: Aktuelles Level wird in `localStorage` gesichert; Hard-Reset setzt den Eintrag zurück.

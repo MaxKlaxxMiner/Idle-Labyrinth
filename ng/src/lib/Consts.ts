@@ -20,6 +20,6 @@ export const Consts = {
     },
     zoom: {
         steps: [1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 21, 26, 34, 42, 55, 68, 89, 110, 144],
-        minStartTileSize: 8,
+        minStartTileSize: 16,
     },
 };

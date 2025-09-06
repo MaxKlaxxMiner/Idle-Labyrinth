@@ -3,6 +3,8 @@ import {RandomMersenne} from "./Random";
 export class Laby {
     readonly width: number;
     readonly height: number;
+    readonly pixWidth: number;
+    readonly pixHeight: number;
     readonly getHWall: (pos: number) => boolean;
     readonly getVWall: (pos: number) => boolean;
 
@@ -14,6 +16,8 @@ export class Laby {
         if ((width - 2) * (height - 2) >= 1 << 28) throw "out of range";
         this.width = width;
         this.height = height;
+        this.pixWidth = width * 2 - 1;
+        this.pixHeight = height * 2 - 1;
         const fields = new Uint32Array(width * height);
 
         function setId(pos: number, id: number): number {
@@ -176,12 +180,10 @@ export class Laby {
         this.getVWall = getVWall;
     }
 
-    // Grid helper: returns true if tile at (x,y) is walkable/free
-    // Coordinates are in the expanded grid: width*2-1 by height*2-1
+    // Grid‑Helper: true, wenn Tile (x,y) begehbar ist
+    // Koordinaten im expandierten Raster: pixWidth x pixHeight
     isFree(x: number, y: number): boolean {
-        const outW = this.width * 2 - 1;
-        const outH = this.height * 2 - 1;
-        if (x < 0 || y < 0 || x >= outW || y >= outH) return false;
+        if (x < 0 || y < 0 || x >= this.pixWidth || y >= this.pixHeight) return false;
         // Intersections are walls
         if ((x & 1) === 0 && (y & 1) === 0) return false;
         const pos = (x >> 1) + (y >> 1) * this.width;
