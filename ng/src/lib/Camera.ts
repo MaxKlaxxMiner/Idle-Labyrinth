@@ -151,6 +151,62 @@ export class Camera {
         return {ox, oy, tileSize: this.tileSize};
     }
 
+    // Direkter Zugriff auf Kamerazentrum (in Weltpixeln)
+    getCenter(): { camX: number; camY: number } {
+        return {camX: this._camX, camY: this._camY};
+    }
+
+    // Setzt Kamerazentrum (in Weltpixeln) mit Begrenzung auf Weltgrenzen
+    setCenter(camX: number, camY: number): boolean {
+        const {worldW, worldH} = this.getWorldPixelSize();
+        let nx = camX;
+        let ny = camY;
+        if (worldW <= this.viewW) nx = worldW / 2; else nx = this.clamp(nx, this.viewW / 2, worldW - this.viewW / 2);
+        if (worldH <= this.viewH) ny = worldH / 2; else ny = this.clamp(ny, this.viewH / 2, worldH - this.viewH / 2);
+        const changed = nx !== this._camX || ny !== this._camY;
+        this._camX = nx;
+        this._camY = ny;
+        return changed;
+    }
+
+    // Schiebt die Kamera minimal, sodass der Spieler innerhalb der Dead-Zone liegt
+    ensurePlayerInsideDeadZone(playerPx: number, playerPy: number): boolean {
+        const {worldW, worldH} = this.getWorldPixelSize();
+        let targetCamX = this._camX;
+        let targetCamY = this._camY;
+
+        // Horizontal
+        if (worldW <= this.viewW) {
+            targetCamX = worldW / 2;
+        } else {
+            const halfDZx = (this.viewW * this.deadFracX) / 2;
+            const left = this._camX - halfDZx;
+            const right = this._camX + halfDZx;
+            if (playerPx < left) targetCamX = playerPx + halfDZx;
+            else if (playerPx > right) targetCamX = playerPx - halfDZx;
+            const minX = this.viewW / 2, maxX = worldW - this.viewW / 2;
+            targetCamX = this.clamp(targetCamX, minX, maxX);
+        }
+
+        // Vertikal
+        if (worldH <= this.viewH) {
+            targetCamY = worldH / 2;
+        } else {
+            const halfDZy = (this.viewH * this.deadFracY) / 2;
+            const top = this._camY - halfDZy;
+            const bottom = this._camY + halfDZy;
+            if (playerPy < top) targetCamY = playerPy + halfDZy;
+            else if (playerPy > bottom) targetCamY = playerPy - halfDZy;
+            const minY = this.viewH / 2, maxY = worldH - this.viewH / 2;
+            targetCamY = this.clamp(targetCamY, minY, maxY);
+        }
+
+        const changed = targetCamX !== this._camX || targetCamY !== this._camY;
+        this._camX = targetCamX;
+        this._camY = targetCamY;
+        return changed;
+    }
+
     private clamp(v: number, min: number, max: number) {
         return Math.max(min, Math.min(max, v));
     }

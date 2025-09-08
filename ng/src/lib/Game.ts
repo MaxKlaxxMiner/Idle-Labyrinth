@@ -45,6 +45,13 @@ export class Game {
     private lastSavedHistoryLen = 0;
     private markers = new Set<number>();
 
+    // Mouse-drag Panning (temporär, bis Mouseup; danach re-centern)
+    private dragging = false;
+    private dragStartX = 0; // CSS-Pixel
+    private dragStartY = 0; // CSS-Pixel
+    private dragStartCamX = 0; // Weltpixel
+    private dragStartCamY = 0; // Weltpixel
+
     constructor(canvas: HTMLCanvasElement) {
         this.bgCanvas = canvas;
 
@@ -70,7 +77,14 @@ export class Game {
         this.loadHistoryRawAndReplay();
 
         this.onResize = this.onResize.bind(this);
+        this.onMouseDown = this.onMouseDown.bind(this);
+        this.onMouseMove = this.onMouseMove.bind(this);
+        this.onMouseUp = this.onMouseUp.bind(this);
         window.addEventListener('resize', this.onResize);
+        // Maus-Eingaben auf dem BG-Canvas abgreifen (FG hat pointer-events: none)
+        this.bgCanvas.addEventListener('mousedown', this.onMouseDown);
+        window.addEventListener('mousemove', this.onMouseMove);
+        window.addEventListener('mouseup', this.onMouseUp);
         this.onResize();
     }
 
@@ -163,8 +177,10 @@ export class Game {
             if (stepKey) this.updatePlayer(stepKey);
         }
 
-        // Camera dead-zone follow (integer-snapped offsets in render)
-        if (this.camera.updateFollowPlayerTile(this.player.x, this.player.y)) this.needsRender = true;
+        // Camera dead-zone follow (bei Drag pausieren)
+        if (!this.dragging) {
+            if (this.camera.updateFollowPlayerTile(this.player.x, this.player.y)) this.needsRender = true;
+        }
 
         // Sofortige Zentrierung auf den Spieler per Enter/NumpadEnter
         if (this.input.consumeKey('Enter', 'NumpadEnter', 'Return')) {
@@ -289,6 +305,41 @@ export class Game {
             this.camera.setBestFitZoom();
             this.camera.centerOnPlayerTile(this.player.x, this.player.y);
         }
+        this.needsRender = true;
+    }
+
+    // Mouse drag handlers: temporäres Panning, danach re-center
+    private onMouseDown(e: MouseEvent) {
+        // Nur linker Button
+        if (e.button !== 0) return;
+        this.dragging = true;
+        this.dragStartX = e.clientX;
+        this.dragStartY = e.clientY;
+        const c = this.camera.getCenter();
+        this.dragStartCamX = c.camX;
+        this.dragStartCamY = c.camY;
+    }
+
+    private onMouseMove(e: MouseEvent) {
+        if (!this.dragging) return;
+        const dpr = Math.min(Consts.display.dprMax, window.devicePixelRatio || 1);
+        const dxCss = e.clientX - this.dragStartX;
+        const dyCss = e.clientY - this.dragStartY;
+        const dx = dxCss * dpr;
+        const dy = dyCss * dpr;
+        // Drag nach rechts verschiebt Kamera nach links (invertiertes Vorzeichen)
+        const changed = this.camera.setCenter(this.dragStartCamX - dx, this.dragStartCamY - dy);
+        if (changed) this.needsRender = true;
+    }
+
+    private onMouseUp(_e: MouseEvent) {
+        if (!this.dragging) return;
+        this.dragging = false;
+        // Nach Loslassen: nur soweit schieben, dass Spieler wieder in Dead-Zone ist
+        const {tileSize} = this.camera.getOffsets();
+        const px = (this.player.x + 0.5) * tileSize;
+        const py = (this.player.y + 0.5) * tileSize;
+        this.camera.ensurePlayerInsideDeadZone(px, py);
         this.needsRender = true;
     }
 
