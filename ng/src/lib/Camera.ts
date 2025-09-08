@@ -1,26 +1,92 @@
-// Kamera mit Dead-Zone und Zentrier-/Follow-Logik
+import {Consts} from './Consts';
+
+// Kamera mit Dead-Zone und Zoom-/Viewport-Status
 export class Camera {
     private _camX = 0; // Weltpixel (Zentrum der Ansicht)
     private _camY = 0; // Weltpixel (Zentrum der Ansicht)
     private deadFracX: number;
     private deadFracY: number;
+    private viewW = 0;
+    private viewH = 0;
+    private pixW = 0; // Laby-Pixelbreite (Knoten-/Pfad-Bitmap)
+    private pixH = 0; // Laby-Pixelhöhe
+    private tileSizeIndex = 0;
+    private tileSize = Consts.zoom.steps[0] ?? 5;
 
     constructor(deadFracX = 0.60, deadFracY = 0.70) {
         this.deadFracX = deadFracX;
         this.deadFracY = deadFracY;
     }
 
-    get camX() {
-        return this._camX;
+    // View/Laby/Zoom-Status
+    setViewSize(w: number, h: number) {
+        this.viewW = w;
+        this.viewH = h;
     }
 
-    get camY() {
-        return this._camY;
+    setWorldSize(pixW: number, pixH: number) {
+        this.pixW = pixW;
+        this.pixH = pixH;
     }
 
-    setDeadZone(fracX: number, fracY: number) {
-        this.deadFracX = fracX;
-        this.deadFracY = fracY;
+    setTileSizeIndex(idx: number) {
+        const clamped = this.clamp(Math.floor(idx), 0, Consts.zoom.steps.length - 1);
+        this.tileSizeIndex = clamped;
+        this.tileSize = Consts.zoom.steps[clamped] ?? this.tileSize;
+    }
+
+    zoomIn(): boolean {
+        const prev = this.tileSizeIndex;
+        this.setTileSizeIndex(prev + 1);
+        return this.tileSizeIndex !== prev;
+    }
+
+    zoomOut(): boolean {
+        const prev = this.tileSizeIndex;
+        this.setTileSizeIndex(prev - 1);
+        return this.tileSizeIndex !== prev;
+    }
+
+    private getWorldPixelSize(): { worldW: number; worldH: number } {
+        return {worldW: this.pixW * this.tileSize, worldH: this.pixH * this.tileSize};
+    }
+
+    // Best-Fit gemäß aktuellem View + Laby-Maßen
+    setBestFitZoom() {
+        const steps = Consts.zoom.steps;
+        const w = this.viewW, h = this.viewH;
+        const maxTileW = Math.floor((w - Consts.sizes.basePad * 2) / Math.max(1, this.pixW));
+        const maxTileH = Math.floor((h - Consts.sizes.basePad * 2) / Math.max(1, this.pixH));
+        const maxFit = Math.max(Consts.sizes.minTileSize, Math.min(maxTileW, maxTileH));
+        const minStart = Consts.zoom.minStartTileSize;
+        let idx = 0;
+        for (let i = 0; i < steps.length; i++) if (steps[i] <= maxFit) idx = i;
+        if (steps[idx] < minStart) {
+            for (let i = 0; i < steps.length; i++) {
+                if (steps[i] >= minStart) {
+                    idx = i;
+                    break;
+                }
+            }
+        }
+        this.setTileSizeIndex(idx);
+    }
+
+    // Komfort: zentriere/folge anhand gespeicherter Größen
+    centerOnPlayerTile(tileX: number, tileY: number) {
+        const ts = this.tileSize;
+        const playerPx = (tileX + 0.5) * ts;
+        const playerPy = (tileY + 0.5) * ts;
+        const {worldW, worldH} = this.getWorldPixelSize();
+        this.centerOn(playerPx, playerPy, this.viewW, this.viewH, worldW, worldH);
+    }
+
+    updateFollowPlayerTile(tileX: number, tileY: number): boolean {
+        const ts = this.tileSize;
+        const playerPx = (tileX + 0.5) * ts;
+        const playerPy = (tileY + 0.5) * ts;
+        const {worldW, worldH} = this.getWorldPixelSize();
+        return this.updateFollow(playerPx, playerPy, this.viewW, this.viewH, worldW, worldH);
     }
 
     // Auf Spieler zentrieren, mit Begrenzung auf Weltgrenzen
@@ -74,17 +140,18 @@ export class Camera {
         return changed;
     }
 
-    // View-Offsets aus Kamera ermitteln
-    getOffsets(viewW: number, viewH: number, worldW: number, worldH: number): { ox: number; oy: number } {
+    // View-Offsets basierend auf internem Zustand
+    getOffsets(): { ox: number; oy: number; tileSize: number } {
+        const viewW = this.viewW, viewH = this.viewH;
+        const {worldW, worldH} = this.getWorldPixelSize();
         let ox: number;
         let oy: number;
         if (worldW <= viewW) ox = Math.floor((viewW - worldW) / 2); else ox = Math.floor(viewW / 2 - this._camX);
         if (worldH <= viewH) oy = Math.floor((viewH - worldH) / 2); else oy = Math.floor(viewH / 2 - this._camY);
-        return {ox, oy};
+        return {ox, oy, tileSize: this.tileSize};
     }
 
     private clamp(v: number, min: number, max: number) {
         return Math.max(min, Math.min(max, v));
     }
 }
-

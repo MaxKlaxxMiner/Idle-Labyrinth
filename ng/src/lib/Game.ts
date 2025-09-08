@@ -34,8 +34,6 @@ export class Game {
     private level = 0; // gameLevel beginnt bei 0
     private player = {x: 1, y: 1, r: 0.35};
     private goal = {x: 0, y: 0};
-    // Discrete zoom via tile sizes
-    private tileSizeIndex = 0;
     private moves = 0;
     private resetLatch = false;
     private history = '';
@@ -132,17 +130,18 @@ export class Game {
     }
 
     private update() {
-        // Zoom controls (managed here)
-        const oldIndex = this.tileSizeIndex;
+        // Zoom controls (über Camera)
+        let zoomChanged = false;
         if (this.input.consumeKey('0')) {
-            // Recompute best-fit on demand to respect current bgCanvas size
-            this.applyBestFitZoom();
+            this.camera.setBestFitZoom();
+            this.camera.centerOnPlayerTile(this.player.x, this.player.y);
+            zoomChanged = true;
         } else if (this.input.consumeKey('+', '=')) {
-            this.tileSizeIndex = Math.min(Consts.zoom.steps.length - 1, this.tileSizeIndex + 1);
+            zoomChanged = this.camera.zoomIn();
         } else if (this.input.consumeKey('-')) {
-            this.tileSizeIndex = Math.max(0, this.tileSizeIndex - 1);
+            zoomChanged = this.camera.zoomOut();
         }
-        if (this.tileSizeIndex !== oldIndex) this.needsRender = true;
+        if (zoomChanged) this.needsRender = true;
 
         // Marker an aktueller Position toggeln (Leertaste)
         if (this.input.consumeKey(' ', 'Space')) {
@@ -224,24 +223,11 @@ export class Game {
         }
 
         // Camera dead-zone follow (integer-snapped offsets in render)
-        const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
-        {
-            const playerPx = (this.player.x + 0.5) * size;
-            const playerPy = (this.player.y + 0.5) * size;
-            const w = this.bgCanvas.width, h = this.bgCanvas.height;
-            const worldW = this.laby.pixWidth * size;
-            const worldH = this.laby.pixHeight * size;
-            if (this.camera.updateFollow(playerPx, playerPy, w, h, worldW, worldH)) this.needsRender = true;
-        }
+        if (this.camera.updateFollowPlayerTile(this.player.x, this.player.y)) this.needsRender = true;
 
         // Sofortige Zentrierung auf den Spieler per Enter/NumpadEnter
         if (this.input.consumeKey('Enter', 'NumpadEnter', 'Return')) {
-            const playerPx = (this.player.x + 0.5) * size;
-            const playerPy = (this.player.y + 0.5) * size;
-            const w = this.bgCanvas.width, h = this.bgCanvas.height;
-            const worldW = this.laby.pixWidth * size;
-            const worldH = this.laby.pixHeight * size;
-            this.camera.centerOn(playerPx, playerPy, w, h, worldW, worldH);
+            this.camera.centerOnPlayerTile(this.player.x, this.player.y);
             this.needsRender = true;
         }
 
@@ -277,8 +263,13 @@ export class Game {
 
         // Goal check
         if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
-            this.level++;
-            //this.level = (this.level + 1) + (this.level + 1) - 1; // verdoppeln
+            if (this.isLocalhost()) {
+                // Debug/Entwicklung: schneller vorwärts (verdoppeln)
+                this.level = (this.level + 1) + (this.level + 1) - 1;
+            } else {
+                // Normal: inkrementell
+                this.level++;
+            }
             this.saveLevel(this.level);
             this.initLevel();
         }
@@ -290,10 +281,7 @@ export class Game {
         // FG: Overlays
         this.ctx.clearRect(0, 0, w, h);
 
-        const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
-        const worldW = this.laby.pixWidth * size;
-        const worldH = this.laby.pixHeight * size;
-        const {ox, oy} = this.camera.getOffsets(w, h, worldW, worldH);
+        const {ox, oy, tileSize: size} = this.camera.getOffsets();
 
         // BG: labyrinth and overlays via Level (uses its edge sets)
         this.levelView.render(ox, oy, size);
@@ -350,40 +338,14 @@ export class Game {
         this.canvas.width = w;
         this.canvas.height = h;
         this.ctx.imageSmoothingEnabled = false;
+        // Camera über neue View informieren
+        this.camera.setViewSize(w, h);
         // Adjust zoom to best fit on resize
-        if (this.laby) this.applyBestFitZoom();
+        if (this.laby) {
+            this.camera.setBestFitZoom();
+            this.camera.centerOnPlayerTile(this.player.x, this.player.y);
+        }
         this.needsRender = true;
-    }
-
-    private applyBestFitZoom() {
-        const steps = Consts.zoom.steps;
-        const w = this.bgCanvas.width;
-        const h = this.bgCanvas.height;
-        const maxTileW = Math.floor((w - Consts.sizes.basePad * 2) / this.laby.pixWidth);
-        const maxTileH = Math.floor((h - Consts.sizes.basePad * 2) / this.laby.pixHeight);
-        const maxFit = Math.max(Consts.sizes.minTileSize, Math.min(maxTileW, maxTileH));
-        const minStart = Consts.zoom.minStartTileSize;
-        let idx = 0;
-        for (let i = 0; i < steps.length; i++) if (steps[i] <= maxFit) idx = i;
-        if (steps[idx] < minStart) {
-            for (let i = 0; i < steps.length; i++) {
-                if (steps[i] >= minStart) {
-                    idx = i;
-                    break;
-                }
-            }
-        }
-        this.tileSizeIndex = idx;
-        // Center camera on player for this zoom
-        const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
-        {
-            const playerPx = (this.player.x + 0.5) * size;
-            const playerPy = (this.player.y + 0.5) * size;
-            const wv = this.bgCanvas.width, hv = this.bgCanvas.height;
-            const worldW = this.laby.pixWidth * size;
-            const worldH = this.laby.pixHeight * size;
-            this.camera.centerOn(playerPx, playerPy, wv, hv, worldW, worldH);
-        }
     }
 
     private createLabyForLevel(gameLevel: number): Laby {
@@ -399,10 +361,8 @@ export class Game {
 
     private canStepTo(cx: number, cy: number, nx: number, ny: number): boolean {
         if (nx < 1 || ny < 1 || nx >= this.laby.pixWidth - 1 || ny >= this.laby.pixHeight - 1) return false;
-        // Ensure stepping by 2 in a cardinal direction
         const dx = nx - cx, dy = ny - cy;
         if (!((Math.abs(dx) === 2 && dy === 0) || (Math.abs(dy) === 2 && dx === 0))) return false;
-        // Intermediate edge must be free
         const mx = cx + Math.sign(dx);
         const my = cy + Math.sign(dy);
         return this.laby.isFree(mx, my);
@@ -417,12 +377,14 @@ export class Game {
         this.player.y = 1;
         this.goal.x = Math.max(1, this.laby.pixWidth - 2);
         this.goal.y = Math.max(1, this.laby.pixHeight - 2);
-
+        this.markers.clear();
         this.levelView.setLaby(this.laby);
         this.levelView.clearHighlights();
-        // Alle Marker pro Level neu starten
-        this.markers.clear();
-        this.applyBestFitZoom();
+
+        // Camera: Weltmaße setzen, Best-Fit und zentrieren
+        this.camera.setWorldSize(this.laby.pixWidth, this.laby.pixHeight);
+        this.camera.setBestFitZoom();
+        this.camera.centerOnPlayerTile(this.player.x, this.player.y);
         this.needsRender = true;
     }
 
@@ -458,6 +420,15 @@ export class Game {
             return Number.isFinite(n) && n >= 0 ? n : null;
         } catch {
             return null;
+        }
+    }
+
+    private isLocalhost(): boolean {
+        try {
+            const h = window.location.hostname;
+            return h === 'localhost' || h === '127.0.0.1' || h === '::1';
+        } catch {
+            return false;
         }
     }
 }
