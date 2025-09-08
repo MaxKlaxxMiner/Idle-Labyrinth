@@ -78,7 +78,10 @@ export class Game {
     stop() {
         if (this.rafId != null) cancelAnimationFrame(this.rafId);
         this.rafId = null;
-        if (this.fastTimer != null) { clearTimeout(this.fastTimer); clearInterval(this.fastTimer); }
+        if (this.fastTimer != null) {
+            clearTimeout(this.fastTimer);
+            clearInterval(this.fastTimer);
+        }
         this.fastTimer = null;
     }
 
@@ -240,13 +243,17 @@ export class Game {
         if (this.input.consumeKey('t', 'T')) {
             this.turbo = !this.turbo;
             // sanfter Loop-Wechsel
-            setTimeout(() => { this.stop(); this.start(); }, 0);
+            setTimeout(() => {
+                this.stop();
+                this.start();
+            }, 0);
             this.needsRender = true;
         }
 
         // Goal check
         if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
             this.level++;
+            //this.level = (this.level + 1) + (this.level + 1) - 1; // verdoppeln
             this.saveLevel(this.level);
             this.initLevel();
         }
@@ -450,8 +457,14 @@ export class Game {
             const minY = h / 2, maxY = worldH - h / 2;
             targetCamY = Math.max(minY, Math.min(maxY, targetCamY));
         }
-        if (targetCamX !== this.camX) { this.camX = targetCamX; changed = true; }
-        if (targetCamY !== this.camY) { this.camY = targetCamY; changed = true; }
+        if (targetCamX !== this.camX) {
+            this.camX = targetCamX;
+            changed = true;
+        }
+        if (targetCamY !== this.camY) {
+            this.camY = targetCamY;
+            changed = true;
+        }
         if (changed) this.needsRender = true;
     }
 }
