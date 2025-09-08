@@ -2,6 +2,7 @@ import {Laby} from './Laby';
 import {Input} from './Input';
 import {Consts} from './Consts';
 import {Level} from './Level';
+import {Camera} from './Camera';
 
 export class Game {
     // Background bgCanvas is managed by Level
@@ -25,11 +26,8 @@ export class Game {
     private turbo = false; // false=vsync (RAF), true=Turbo (no-vsync)
     private fastTimer: number | null = null;
 
-    // Camera with dead-zone
-    private camX = 0; // world pixels (center of view)
-    private camY = 0; // world pixels (center of view)
-    private deadFracX = 0.60; // fraction of screen width used as dead-zone
-    private deadFracY = 0.70; // fraction of screen height used as dead-zone
+    // Camera mit Dead-Zone
+    private camera = new Camera();
 
     // Input and player state
     private input = new Input();
@@ -41,7 +39,7 @@ export class Game {
     private moves = 0;
     private resetLatch = false;
     private history = '';
-    private markers = new Set<string>();
+    private markers = new Set<number>();
 
     constructor(canvas: HTMLCanvasElement) {
         this.bgCanvas = canvas;
@@ -227,11 +225,23 @@ export class Game {
 
         // Camera dead-zone follow (integer-snapped offsets in render)
         const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
-        this.updateCamera(size);
+        {
+            const playerPx = (this.player.x + 0.5) * size;
+            const playerPy = (this.player.y + 0.5) * size;
+            const w = this.bgCanvas.width, h = this.bgCanvas.height;
+            const worldW = this.laby.pixWidth * size;
+            const worldH = this.laby.pixHeight * size;
+            if (this.camera.updateFollow(playerPx, playerPy, w, h, worldW, worldH)) this.needsRender = true;
+        }
 
         // Sofortige Zentrierung auf den Spieler per Enter/NumpadEnter
         if (this.input.consumeKey('Enter', 'NumpadEnter', 'Return')) {
-            this.centerCamera(size);
+            const playerPx = (this.player.x + 0.5) * size;
+            const playerPy = (this.player.y + 0.5) * size;
+            const w = this.bgCanvas.width, h = this.bgCanvas.height;
+            const worldW = this.laby.pixWidth * size;
+            const worldH = this.laby.pixHeight * size;
+            this.camera.centerOn(playerPx, playerPy, w, h, worldW, worldH);
             this.needsRender = true;
         }
 
@@ -283,12 +293,7 @@ export class Game {
         const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
         const worldW = this.laby.pixWidth * size;
         const worldH = this.laby.pixHeight * size;
-        let ox: number;
-        let oy: number;
-        if (worldW <= w) ox = Math.floor((w - worldW) / 2);
-        else ox = Math.floor(w / 2 - this.camX);
-        if (worldH <= h) oy = Math.floor((h - worldH) / 2);
-        else oy = Math.floor(h / 2 - this.camY);
+        const {ox, oy} = this.camera.getOffsets(w, h, worldW, worldH);
 
         // BG: labyrinth and overlays via Level (uses its edge sets)
         this.levelView.render(ox, oy, size);
@@ -315,7 +320,8 @@ export class Game {
         // Marker zeichnen (rote Kreise) – über dem Spieler
         this.ctx.fillStyle = Consts.colors.marker;
         for (const key of this.markers) {
-            const [mx, my] = key.split(',').map(Number);
+            const mx = (key >>> 16) & 0xffff;
+            const my = key & 0xffff;
             if (size < Consts.sizes.smallTileThreshold) {
                 this.ctx.fillRect(ox + mx * size, oy + my * size, size, size);
             } else {
@@ -370,7 +376,14 @@ export class Game {
         this.tileSizeIndex = idx;
         // Center camera on player for this zoom
         const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
-        this.centerCamera(size);
+        {
+            const playerPx = (this.player.x + 0.5) * size;
+            const playerPy = (this.player.y + 0.5) * size;
+            const wv = this.bgCanvas.width, hv = this.bgCanvas.height;
+            const worldW = this.laby.pixWidth * size;
+            const worldH = this.laby.pixHeight * size;
+            this.camera.centerOn(playerPx, playerPy, wv, hv, worldW, worldH);
+        }
     }
 
     private createLabyForLevel(gameLevel: number): Laby {
@@ -419,19 +432,14 @@ export class Game {
         this.initLevel();
     }
 
-    // Marker‑Helfer
-    private markerKey(x: number, y: number): string {
-        return `${x},${y}`;
-    }
-
     private toggleMarkerAt(x: number, y: number) {
-        const k = this.markerKey(x, y);
+        const k = ((x & 0xffff) << 16) | (y & 0xffff);
         if (this.markers.has(k)) this.markers.delete(k); else this.markers.add(k);
         this.needsRender = true;
     }
 
     private autoClearMarkerAt(x: number, y: number) {
-        const k = this.markerKey(x, y);
+        const k = ((x & 0xffff) << 16) | (y & 0xffff);
         if (this.markers.delete(k)) this.needsRender = true;
     }
 
@@ -451,66 +459,5 @@ export class Game {
         } catch {
             return null;
         }
-    }
-
-    // Camera helpers
-    private centerCamera(size: number) {
-        const worldW = this.laby.pixWidth * size;
-        const worldH = this.laby.pixHeight * size;
-        const w = this.bgCanvas.width;
-        const h = this.bgCanvas.height;
-        const playerPx = (this.player.x + 0.5) * size;
-        const playerPy = (this.player.y + 0.5) * size;
-        if (worldW <= w) this.camX = worldW / 2; else this.camX = Math.max(w / 2, Math.min(worldW - w / 2, playerPx));
-        if (worldH <= h) this.camY = worldH / 2; else this.camY = Math.max(h / 2, Math.min(worldH - h / 2, playerPy));
-    }
-
-    private updateCamera(size: number) {
-        const worldW = this.laby.pixWidth * size;
-        const worldH = this.laby.pixHeight * size;
-        const w = this.bgCanvas.width;
-        const h = this.bgCanvas.height;
-        const playerPx = (this.player.x + 0.5) * size;
-        const playerPy = (this.player.y + 0.5) * size;
-        let changed = false;
-        let targetCamX = this.camX;
-        let targetCamY = this.camY;
-        // Horizontal
-        if (worldW <= w) {
-            targetCamX = worldW / 2;
-        } else {
-            const halfDZx = (w * this.deadFracX) / 2;
-            const left = this.camX - halfDZx;
-            const right = this.camX + halfDZx;
-            if (playerPx < left || playerPx > right) {
-                // Größerer Sprung: auf Achse zentrieren
-                targetCamX = playerPx;
-            }
-            const minX = w / 2, maxX = worldW - w / 2;
-            targetCamX = Math.max(minX, Math.min(maxX, targetCamX));
-        }
-        // Vertical
-        if (worldH <= h) {
-            targetCamY = worldH / 2;
-        } else {
-            const halfDZy = (h * this.deadFracY) / 2;
-            const top = this.camY - halfDZy;
-            const bottom = this.camY + halfDZy;
-            if (playerPy < top || playerPy > bottom) {
-                // Größerer Sprung: auf Achse zentrieren
-                targetCamY = playerPy;
-            }
-            const minY = h / 2, maxY = worldH - h / 2;
-            targetCamY = Math.max(minY, Math.min(maxY, targetCamY));
-        }
-        if (targetCamX !== this.camX) {
-            this.camX = targetCamX;
-            changed = true;
-        }
-        if (targetCamY !== this.camY) {
-            this.camY = targetCamY;
-            changed = true;
-        }
-        if (changed) this.needsRender = true;
     }
 }
