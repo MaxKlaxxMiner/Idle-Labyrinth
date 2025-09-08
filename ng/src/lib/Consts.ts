@@ -7,6 +7,7 @@ export const Consts = {
         hudText: '#eaeaea',
         trail: 'rgba(253, 224, 71, 0.2)',
         backtrack: 'rgba(148, 163, 184, 0.15)',
+        marker: '#ef4444',
     },
     sizes: {
         basePad: 8,

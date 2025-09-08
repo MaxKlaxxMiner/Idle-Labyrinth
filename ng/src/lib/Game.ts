@@ -4,11 +4,10 @@ import {Consts} from './Consts';
 import {Level} from './Level';
 
 export class Game {
-    // Background canvas is managed by Level
+    // Background bgCanvas is managed by Level
+    private bgCanvas: HTMLCanvasElement;
     private canvas: HTMLCanvasElement;
-    // Foreground overlay (neu)
-    private fgCanvas: HTMLCanvasElement;
-    private fgCtx: CanvasRenderingContext2D;
+    private ctx: CanvasRenderingContext2D;
     private rafId: number | null = null;
     private laby!: Laby;
     private levelView!: Level;
@@ -42,9 +41,10 @@ export class Game {
     private moves = 0;
     private resetLatch = false;
     private history = '';
+    private markers = new Set<string>();
 
     constructor(canvas: HTMLCanvasElement) {
-        this.canvas = canvas;
+        this.bgCanvas = canvas;
 
         // Foreground-Canvas erzeugen und überlagern
         const fg = document.createElement('canvas');
@@ -54,12 +54,12 @@ export class Game {
         fg.style.top = '0';
         fg.style.zIndex = '1';
         fg.style.pointerEvents = 'none';
-        (this.canvas.parentElement || document.body).appendChild(fg);
-        const fgCtx = fg.getContext('2d');
-        if (!fgCtx) throw new Error('Canvas 2D Context (fg) nicht verfügbar');
-        this.fgCanvas = fg;
-        this.fgCtx = fgCtx;
-        this.levelView = new Level(this.canvas);
+        (this.bgCanvas.parentElement || document.body).appendChild(fg);
+        const ctx = fg.getContext('2d');
+        if (!ctx) throw new Error('Canvas 2D Context (fg) nicht verfügbar');
+        this.canvas = fg;
+        this.ctx = ctx;
+        this.levelView = new Level(this.bgCanvas);
 
         const saved = this.loadLevel();
         this.level = Number.isFinite(saved) && saved! >= 0 ? saved! : 0;
@@ -137,7 +137,7 @@ export class Game {
         // Zoom controls (managed here)
         const oldIndex = this.tileSizeIndex;
         if (this.input.consumeKey('0')) {
-            // Recompute best-fit on demand to respect current canvas size
+            // Recompute best-fit on demand to respect current bgCanvas size
             this.applyBestFitZoom();
         } else if (this.input.consumeKey('+', '=')) {
             this.tileSizeIndex = Math.min(Consts.zoom.steps.length - 1, this.tileSizeIndex + 1);
@@ -145,6 +145,11 @@ export class Game {
             this.tileSizeIndex = Math.max(0, this.tileSizeIndex - 1);
         }
         if (this.tileSizeIndex !== oldIndex) this.needsRender = true;
+
+        // Marker an aktueller Position toggeln (Leertaste)
+        if (this.input.consumeKey(' ', 'Space')) {
+            this.toggleMarkerAt(this.player.x, this.player.y);
+        }
 
         // Undo: Backspace/Delete -> genau einen Schritt zurück (Autorepeat durch Keydown-Repeat)
         if (this.input.consumeKey('Backspace', 'Delete')) {
@@ -166,6 +171,8 @@ export class Game {
                     this.player.x = nx;
                     this.player.y = ny;
                     this.moves = Math.max(0, this.moves - 1);
+                    // Marker beim Zurücklaufen automatisch entfernen
+                    this.autoClearMarkerAt(this.player.x, this.player.y);
                     this.needsRender = true;
                 }
             }
@@ -211,6 +218,8 @@ export class Game {
                         this.history += stepChar;
                         this.moves += 1;
                     }
+                    // Marker beim Erreichen eines markierten Knotens automatisch löschen
+                    this.autoClearMarkerAt(this.player.x, this.player.y);
                     this.needsRender = true;
                 }
             }
@@ -219,6 +228,12 @@ export class Game {
         // Camera dead-zone follow (integer-snapped offsets in render)
         const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
         this.updateCamera(size);
+
+        // Sofortige Zentrierung auf den Spieler per Enter/NumpadEnter
+        if (this.input.consumeKey('Enter', 'NumpadEnter', 'Return')) {
+            this.centerCamera(size);
+            this.needsRender = true;
+        }
 
         // Reset / Hardreset per Taste 'R'
         // Detect reset: prefer edge, but allow first-hold fallback with latch
@@ -260,10 +275,10 @@ export class Game {
     }
 
     private render() {
-        const w = this.canvas.width;
-        const h = this.canvas.height;
+        const w = this.bgCanvas.width;
+        const h = this.bgCanvas.height;
         // FG: Overlays
-        this.fgCtx.clearRect(0, 0, w, h);
+        this.ctx.clearRect(0, 0, w, h);
 
         const size = Consts.zoom.steps[this.tileSizeIndex] ?? 5;
         const worldW = this.laby.pixWidth * size;
@@ -279,43 +294,56 @@ export class Game {
         this.levelView.render(ox, oy, size);
 
         // Draw goal
-        this.fgCtx.fillStyle = Consts.colors.goal;
+        this.ctx.fillStyle = Consts.colors.goal;
         if (size < Consts.sizes.smallTileThreshold) {
-            this.fgCtx.fillRect(ox + this.goal.x * size, oy + this.goal.y * size, size, size);
+            this.ctx.fillRect(ox + this.goal.x * size, oy + this.goal.y * size, size, size);
         } else {
-            this.fgCtx.fillRect(ox + this.goal.x * size + size * 0.25, oy + this.goal.y * size + size * 0.25, size * 0.5, size * 0.5);
+            this.ctx.fillRect(ox + this.goal.x * size + size * 0.25, oy + this.goal.y * size + size * 0.25, size * 0.5, size * 0.5);
         }
 
         // Draw player (yellow circle)
-        this.fgCtx.fillStyle = Consts.colors.player;
+        this.ctx.fillStyle = Consts.colors.player;
         if (size < Consts.sizes.smallTileThreshold) {
-            this.fgCtx.fillRect(ox + this.player.x * size, oy + this.player.y * size, size, size);
+            this.ctx.fillRect(ox + this.player.x * size, oy + this.player.y * size, size, size);
         } else {
-            this.fgCtx.beginPath();
+            this.ctx.beginPath();
             // Subpixel-Shift um 0.5px für optische Zentrierung
-            this.fgCtx.arc(ox + (this.player.x + 0.5) * size + 0.5, oy + (this.player.y + 0.5) * size + 0.5, this.player.r * size, 0, Math.PI * 2);
-            this.fgCtx.fill();
+            this.ctx.arc(ox + (this.player.x + 0.5) * size + 0.5, oy + (this.player.y + 0.5) * size + 0.5, this.player.r * size, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+
+        // Marker zeichnen (rote Kreise) – über dem Spieler
+        this.ctx.fillStyle = Consts.colors.marker;
+        for (const key of this.markers) {
+            const [mx, my] = key.split(',').map(Number);
+            if (size < Consts.sizes.smallTileThreshold) {
+                this.ctx.fillRect(ox + mx * size, oy + my * size, size, size);
+            } else {
+                this.ctx.beginPath();
+                this.ctx.arc(ox + (mx + 0.5) * size + 0.5, oy + (my + 0.5) * size + 0.5, Math.max(1, 0.28 * size), 0, Math.PI * 2);
+                this.ctx.fill();
+            }
         }
 
         // HUD (foreground) - single line
-        this.fgCtx.fillStyle = Consts.colors.hudText;
-        this.fgCtx.font = Consts.sizes.hudFont;
-        this.fgCtx.textBaseline = 'top';
+        this.ctx.fillStyle = Consts.colors.hudText;
+        this.ctx.font = Consts.sizes.hudFont;
+        this.ctx.textBaseline = 'top';
         const mode = this.turbo ? 'Turbo' : 'VSync';
-        const hudLine = `Level: ${this.level + 1}  Moves: ${this.moves}  |  Tile: ${size}px (+/- , 0 fit)  |  Move: WASD/↑↓←→  Reset: R  |  Mode: ${mode} (T)  |  FPS: ${this.fpsValue}`;
-        this.fgCtx.fillText(hudLine, 8, 8);
+        const hudLine = `Level: ${this.level + 1}  Moves: ${this.moves}  |  Tile: ${size}px (+/- , 0 fit)  |  Move: WASD/↑↓←→  Reset: R  Mark: Space  Center: Enter  |  Mode: ${mode} (T)  |  FPS: ${this.fpsValue}`;
+        this.ctx.fillText(hudLine, 8, 8);
     }
 
     private onResize() {
         const dpr = Math.min(Consts.display.dprMax, window.devicePixelRatio || 1);
-        const rect = this.canvas.getBoundingClientRect();
+        const rect = this.bgCanvas.getBoundingClientRect();
         const w = Math.max(320, Math.floor(rect.width * dpr));
         const h = Math.max(240, Math.floor(rect.height * dpr));
         // Resize BG via Level
         this.levelView.resize(w, h);
-        this.fgCanvas.width = w;
-        this.fgCanvas.height = h;
-        this.fgCtx.imageSmoothingEnabled = false;
+        this.canvas.width = w;
+        this.canvas.height = h;
+        this.ctx.imageSmoothingEnabled = false;
         // Adjust zoom to best fit on resize
         if (this.laby) this.applyBestFitZoom();
         this.needsRender = true;
@@ -323,8 +351,8 @@ export class Game {
 
     private applyBestFitZoom() {
         const steps = Consts.zoom.steps;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
+        const w = this.bgCanvas.width;
+        const h = this.bgCanvas.height;
         const maxTileW = Math.floor((w - Consts.sizes.basePad * 2) / this.laby.pixWidth);
         const maxTileH = Math.floor((h - Consts.sizes.basePad * 2) / this.laby.pixHeight);
         const maxFit = Math.max(Consts.sizes.minTileSize, Math.min(maxTileW, maxTileH));
@@ -379,6 +407,8 @@ export class Game {
 
         this.levelView.setLaby(this.laby);
         this.levelView.clearHighlights();
+        // Alle Marker pro Level neu starten
+        this.markers.clear();
         this.applyBestFitZoom();
         this.needsRender = true;
     }
@@ -387,6 +417,22 @@ export class Game {
         this.level = 0;
         this.saveLevel(this.level);
         this.initLevel();
+    }
+
+    // Marker‑Helfer
+    private markerKey(x: number, y: number): string {
+        return `${x},${y}`;
+    }
+
+    private toggleMarkerAt(x: number, y: number) {
+        const k = this.markerKey(x, y);
+        if (this.markers.has(k)) this.markers.delete(k); else this.markers.add(k);
+        this.needsRender = true;
+    }
+
+    private autoClearMarkerAt(x: number, y: number) {
+        const k = this.markerKey(x, y);
+        if (this.markers.delete(k)) this.needsRender = true;
     }
 
     private saveLevel(level: number) {
@@ -411,8 +457,8 @@ export class Game {
     private centerCamera(size: number) {
         const worldW = this.laby.pixWidth * size;
         const worldH = this.laby.pixHeight * size;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
+        const w = this.bgCanvas.width;
+        const h = this.bgCanvas.height;
         const playerPx = (this.player.x + 0.5) * size;
         const playerPy = (this.player.y + 0.5) * size;
         if (worldW <= w) this.camX = worldW / 2; else this.camX = Math.max(w / 2, Math.min(worldW - w / 2, playerPx));
@@ -422,8 +468,8 @@ export class Game {
     private updateCamera(size: number) {
         const worldW = this.laby.pixWidth * size;
         const worldH = this.laby.pixHeight * size;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
+        const w = this.bgCanvas.width;
+        const h = this.bgCanvas.height;
         const playerPx = (this.player.x + 0.5) * size;
         const playerPy = (this.player.y + 0.5) * size;
         let changed = false;
