@@ -8,7 +8,7 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 - `src/lib/Game.ts`: Zentrale Spielklasse (Game-Loop, Eingabe, Level-/Renderlogik, Persistenz).
 - `src/lib/Game.ts`: Zentrale Spielklasse (Game-Loop, Eingabe, Level-/Renderlogik, Persistenz, Pfad-Historie/Undo).
 - `src/lib/Laby.ts`: Deterministischer, seed-basierter Labyrinth-Generator mit „expandiertem“ Grid und `isFree(x,y)`-Abfrage.
-- `src/lib/Input.ts`: Tastatureingabe (gedebouncte Schrittsteuerung, Zoom, Reset).
+- `src/lib/Input.ts`: Tastatureingabe (gedebouncte Schrittsteuerung, Zoom, Reset). `consumeStepKey()` liefert pro Tastendruck genau eine Richtung als Zeichen `L/R/U/D` (deterministische Priorität).
 - `src/lib/Random.ts`: Zufall (Mersenne Twister + schneller LCG).
 - `public/index.html`: Template (via HtmlWebpackPlugin eingebunden).
 
@@ -20,12 +20,14 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 
 2) Game-Loop und Zustände (`Game`)
 - Start/Stop per `requestAnimationFrame`; `update(dt)` + bedarfsorientiertes `render()` (invalidate via `needsRender`).
-- Eingabe: `Input.consumeStepDir()` liefert pro Tastendruck genau einen Schritt (Determinismus durch Prioritätsreihenfolge). `zoomDelta()` steuert Zoom; `consumeKey('r')` für Reset (Edge-getriggert). Zusätzlich Latch-Logik für gehaltenes „R“.
+- Eingabe: `Input.consumeStepKey()` liefert pro Tastendruck genau eine Richtung als Zeichen `L/R/U/D` (Determinismus durch Prioritätsreihenfolge). `consumeKey('r')` für Reset (Edge-getriggert). Zusätzlich Latch-Logik für gehaltenes „R“.
 - Undo: `Backspace`/`Delete` macht den letzten Schritt rückgängig (Autorepeat funktioniert über wiederholte `keydown`-Events; `Input.consumeKey()` verarbeitet diese).
 - Levelgröße wächst über eine einfache Heuristik (Start 5x5, Zuwachs um 2, Verhältnis nähert goldenen Schnitt an). Seed: `BASE_SEED + w + h + level`.
 - Spawn/Goal: Sucht jeweils die nächste freie Innenzelle nahe (1,1) bzw. (pixWidth-2, pixHeight-2).
 - Persistenz: Speichert `level` in `localStorage` unter `idle-laby-level`.
 - Pfad-Historie: `history: string`, speichert Bewegungen als Zeichenfolge aus `L/R/U/D`. Beim Vorwärtsgehen wird ein Zeichen angehängt; beim Undo entfernt.
+- Eingabe-Rohspur: `historyRaw: string`, behält alle Eingaben ohne Löschung bei. Kodierung: `L/R/U/D` für Bewegung, `B` für Backspace/Delete (Undo), `M` für Space/Marker. Wird beim Level-Reset geleert.
+- Speicherung `historyRaw`: wird unter `idle-laby-historyRaw` abgelegt. Bei Levelwechsel/Restart wird sofort ein leerer Verlauf gespeichert. Während des Spiels erfolgt ein Autosave höchstens alle 3s und nur bei Änderungen. Beim Start wird ein vorhandener Verlauf geladen und über `updatePlayer()` vollständig abgespielt (Rekonstruktion von Weg, Markern und Undo-Historie).
 
 3) Rendering (Canvas 2D)
 - Verwendet expandierte Maße aus `Laby`: `pixWidth = w*2-1`, `pixHeight = h*2-1` (Consumer rechnen nicht selbst, sondern lesen diese Properties).

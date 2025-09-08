@@ -37,6 +37,12 @@ export class Game {
     private moves = 0;
     private resetLatch = false;
     private history = '';
+    // Vollständige Eingabe-Historie: behält alle Eingaben bei (L/R/U/D/B/M)
+    // B = Backspace/Delete (Undo), M = Marker (Space)
+    private historyRaw = '';
+    // Throttle für Autosave der historyRaw
+    private lastHistorySaveAt = 0;
+    private lastSavedHistoryLen = 0;
     private markers = new Set<number>();
 
     constructor(canvas: HTMLCanvasElement) {
@@ -59,7 +65,9 @@ export class Game {
 
         const saved = this.loadLevel();
         this.level = Number.isFinite(saved) && saved! >= 0 ? saved! : 0;
-        this.initLevel();
+        // Initial: Level setzen, aber historyRaw erst nach optionalem Replay speichern
+        this.initLevel(false);
+        this.loadHistoryRawAndReplay();
 
         this.onResize = this.onResize.bind(this);
         window.addEventListener('resize', this.onResize);
@@ -144,82 +152,15 @@ export class Game {
         if (zoomChanged) this.needsRender = true;
 
         // Marker an aktueller Position toggeln (Leertaste)
-        if (this.input.consumeKey(' ', 'Space')) {
-            this.toggleMarkerAt(this.player.x, this.player.y);
-        }
+        if (this.input.consumeKey(' ', 'Space')) this.updatePlayer('M');
 
         // Undo: Backspace/Delete -> genau einen Schritt zurück (Autorepeat durch Keydown-Repeat)
         if (this.input.consumeKey('Backspace', 'Delete')) {
-            if (this.history.length > 0) {
-                const last = this.history.charAt(this.history.length - 1);
-                this.history = this.history.slice(0, -1);
-                let dx = 0, dy = 0;
-                if (last === 'L') dx = 1;
-                else if (last === 'R') dx = -1;
-                else if (last === 'U') dy = 1;
-                else if (last === 'D') dy = -1;
-                const nx = this.player.x + dx * 2;
-                const ny = this.player.y + dy * 2;
-                if (this.canStepTo(this.player.x, this.player.y, nx, ny)) {
-                    this.levelView.clearCell(nx - dx * 2, ny - dy * 2, true);
-                    this.levelView.clearCell(nx - dx, ny - dy, true);
-                    this.levelView.markCell(nx - dx * 2, ny - dy * 2, false);
-                    this.levelView.markCell(nx - dx, ny - dy, false);
-                    this.player.x = nx;
-                    this.player.y = ny;
-                    this.moves = Math.max(0, this.moves - 1);
-                    // Marker beim Zurücklaufen automatisch entfernen
-                    this.autoClearMarkerAt(this.player.x, this.player.y);
-                    this.needsRender = true;
-                }
-            }
+            this.updatePlayer('B');
         } else {
             // Discretes Vorwärts-Stepping: pro Tastendruck 1 Knoten (2 Tiles)
-            const step = this.input.consumeStepDir();
-            if (step) {
-                const sx = step.dx * 2;
-                const sy = step.dy * 2;
-                const prevX = this.player.x;
-                const prevY = this.player.y;
-                const nx = prevX + sx;
-                const ny = prevY + sy;
-                if (this.canStepTo(prevX, prevY, nx, ny)) {
-                    this.player.x = nx;
-                    this.player.y = ny;
-                    // Schrittzeichen bestimmen (L/R/U/D)
-                    let stepChar: 'L' | 'R' | 'U' | 'D';
-                    if (step.dx === -1) stepChar = 'L';
-                    else if (step.dx === 1) stepChar = 'R';
-                    else if (step.dy === -1) stepChar = 'U';
-                    else stepChar = 'D';
-
-                    // Wenn der Schritt die genaue Umkehrung des letzten ist, dann backtracken
-                    const last = this.history.charAt(this.history.length - 1);
-                    const isUndo =
-                        (last === 'L' && stepChar === 'R') ||
-                        (last === 'R' && stepChar === 'L') ||
-                        (last === 'U' && stepChar === 'D') ||
-                        (last === 'D' && stepChar === 'U');
-                    if (isUndo) {
-                        this.levelView.clearCell(nx - step.dx, ny - step.dy, true);
-                        this.levelView.clearCell(prevX, prevY, true);
-                        this.levelView.markCell(nx - step.dx, ny - step.dy, false);
-                        this.levelView.markCell(prevX, prevY, false);
-                        this.history = this.history.slice(0, -1);
-                        this.moves = Math.max(0, this.moves - 1);
-                    } else {
-                        this.levelView.clearCell(nx - step.dx, ny - step.dy, false);
-                        this.levelView.clearCell(nx, ny, false);
-                        this.levelView.markCell(nx - step.dx, ny - step.dy, true);
-                        this.levelView.markCell(nx, ny, true);
-                        this.history += stepChar;
-                        this.moves += 1;
-                    }
-                    // Marker beim Erreichen eines markierten Knotens automatisch löschen
-                    this.autoClearMarkerAt(this.player.x, this.player.y);
-                    this.needsRender = true;
-                }
-            }
+            const stepKey = this.input.consumeStepKey();
+            if (stepKey) this.updatePlayer(stepKey);
         }
 
         // Camera dead-zone follow (integer-snapped offsets in render)
@@ -273,6 +214,9 @@ export class Game {
             this.saveLevel(this.level);
             this.initLevel();
         }
+
+        // Periodischer Autosave der historyRaw (alle 3s, nur bei Änderungen)
+        this.saveHistoryRaw();
     }
 
     private render() {
@@ -368,11 +312,14 @@ export class Game {
         return this.laby.isFree(mx, my);
     }
 
-    private initLevel() {
+    private initLevel(saveImmediate: boolean = true) {
         this.laby = this.createLabyForLevel(this.level);
 
         this.moves = 0;
         this.history = '';
+        this.historyRaw = '';
+        // Sofort speichern bei Restart/Levelwechsel (leerer Verlauf)
+        if (saveImmediate) this.saveHistoryRaw(true);
         this.player.x = 1;
         this.player.y = 1;
         this.goal.x = Math.max(1, this.laby.pixWidth - 2);
@@ -385,6 +332,88 @@ export class Game {
         this.camera.setWorldSize(this.laby.pixWidth, this.laby.pixHeight);
         this.camera.setBestFitZoom();
         this.camera.centerOnPlayerTile(this.player.x, this.player.y);
+        this.needsRender = true;
+    }
+
+    // Verarbeitet Spieler-relevante Eingaben (Rohcodes):
+    // 'L','R','U','D' = Bewegungen; 'B' = Backspace/Undo; 'M' = Marker toggle
+    private updatePlayer(inputKey: 'L' | 'R' | 'U' | 'D' | 'B' | 'M') {
+        if (inputKey === 'M') {
+            this.historyRaw += 'M';
+            this.toggleMarkerAt(this.player.x, this.player.y);
+            return;
+        }
+
+        if (inputKey === 'B') {
+            this.historyRaw += 'B';
+            if (this.history.length === 0) return;
+            const last = this.history.charAt(this.history.length - 1);
+            let dx = 0, dy = 0;
+            if (last === 'L') dx = 1;
+            else if (last === 'R') dx = -1;
+            else if (last === 'U') dy = 1;
+            else if (last === 'D') dy = -1;
+            const nx = this.player.x + dx * 2;
+            const ny = this.player.y + dy * 2;
+            if (!this.canStepTo(this.player.x, this.player.y, nx, ny)) return;
+            this.levelView.clearCell(nx - dx * 2, ny - dy * 2, true);
+            this.levelView.clearCell(nx - dx, ny - dy, true);
+            this.levelView.markCell(nx - dx * 2, ny - dy * 2, false);
+            this.levelView.markCell(nx - dx, ny - dy, false);
+            this.player.x = nx;
+            this.player.y = ny;
+            this.moves = Math.max(0, this.moves - 1);
+            this.autoClearMarkerAt(this.player.x, this.player.y);
+            this.needsRender = true;
+            this.history = this.history.slice(0, -1);
+            return;
+        }
+
+        // Bewegungen
+        let dx = 0, dy = 0;
+        if (inputKey === 'L') dx = -1;
+        else if (inputKey === 'R') dx = 1;
+        else if (inputKey === 'U') dy = -1;
+        else if (inputKey === 'D') dy = 1;
+
+        const prevX = this.player.x;
+        const prevY = this.player.y;
+        const nx = prevX + dx * 2;
+        const ny = prevY + dy * 2;
+        if (!this.canStepTo(prevX, prevY, nx, ny)) return;
+
+        this.player.x = nx;
+        this.player.y = ny;
+
+        this.historyRaw += inputKey;
+
+        const last = this.history.charAt(this.history.length - 1);
+        const isUndo =
+            (last === 'L' && inputKey === 'R') ||
+            (last === 'R' && inputKey === 'L') ||
+            (last === 'U' && inputKey === 'D') ||
+            (last === 'D' && inputKey === 'U');
+
+        // dx,dy are -1/0/1; cells to update need +/-1 positions
+        const cx = dx; // center step delta (±1 on axis)
+        const cy = dy;
+
+        if (isUndo) {
+            this.levelView.clearCell(nx - cx, ny - cy, true);
+            this.levelView.clearCell(prevX, prevY, true);
+            this.levelView.markCell(nx - cx, ny - cy, false);
+            this.levelView.markCell(prevX, prevY, false);
+            this.history = this.history.slice(0, -1);
+            this.moves = Math.max(0, this.moves - 1);
+        } else {
+            this.levelView.clearCell(nx - cx, ny - cy, false);
+            this.levelView.clearCell(nx, ny, false);
+            this.levelView.markCell(nx - cx, ny - cy, true);
+            this.levelView.markCell(nx, ny, true);
+            this.history += inputKey;
+            this.moves += 1;
+        }
+        this.autoClearMarkerAt(this.player.x, this.player.y);
         this.needsRender = true;
     }
 
@@ -420,6 +449,41 @@ export class Game {
             return Number.isFinite(n) && n >= 0 ? n : null;
         } catch {
             return null;
+        }
+    }
+
+    // Speichert historyRaw throttled (>=3s Abstand) oder erzwungen sofort
+    private saveHistoryRaw(force = false) {
+        try {
+            const now = performance.now();
+            if (!force) {
+                if (this.historyRaw.length === this.lastSavedHistoryLen) return; // keine Änderung
+                if (now - this.lastHistorySaveAt < 3000) return; // Throttle 3s
+            }
+            localStorage.setItem('idle-laby-historyRaw', this.historyRaw);
+            this.lastSavedHistoryLen = this.historyRaw.length;
+            this.lastHistorySaveAt = now;
+        } catch {
+            // ignorieren (z. B. Storage deaktiviert)
+        }
+    }
+
+    // Lädt ggf. gespeicherte historyRaw und spielt sie mittels updatePlayer() ab
+    private loadHistoryRawAndReplay() {
+        try {
+            const raw = localStorage.getItem('idle-laby-historyRaw');
+            if (!raw) return;
+            for (let i = 0; i < raw.length; i++) {
+                const c = raw.charAt(i);
+                if (c === 'L' || c === 'R' || c === 'U' || c === 'D' || c === 'B' || c === 'M') {
+                    this.updatePlayer(c);
+                }
+            }
+            // Nach Replay Kamera auf Spieler zentrieren, Render anstoßen
+            this.camera.centerOnPlayerTile(this.player.x, this.player.y);
+            this.needsRender = true;
+        } catch {
+            // ignorieren
         }
     }
 

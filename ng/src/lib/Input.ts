@@ -30,20 +30,20 @@ export class Input {
         this.pressed.delete(k);
     }
 
-    consumeStepDir(): { dx: number; dy: number } | null {
+    consumeStepKey(): 'L' | 'R' | 'U' | 'D' | null {
         // Priority order to make behavior deterministic
-        const dirs: Array<[string[], { dx: number; dy: number }]> = [
-            [["w", "ArrowUp"], {dx: 0, dy: -1}],
-            [["s", "ArrowDown"], {dx: 0, dy: 1}],
-            [["a", "ArrowLeft"], {dx: -1, dy: 0}],
-            [["d", "ArrowRight"], {dx: 1, dy: 0}],
+        const dirs: Array<[string[], 'L' | 'R' | 'U' | 'D']> = [
+            [["w", "ArrowUp"], 'U'],
+            [["s", "ArrowDown"], 'D'],
+            [["a", "ArrowLeft"], 'L'],
+            [["d", "ArrowRight"], 'R'],
         ];
-        for (const [keys, dir] of dirs) {
+        for (const [keys, keyChar] of dirs) {
             for (const k of keys) {
                 if (this.edged.has(k)) {
                     // consume all direction keys to avoid multiple moves per frame
                     for (const [ks] of dirs) ks.forEach(key => this.edged.delete(key));
-                    return dir;
+                    return keyChar;
                 }
             }
         }
