@@ -221,8 +221,10 @@ export class Game {
         // Goal check
         if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
             if (this.isLocalhost()) {
-                // Debug/Entwicklung: schneller vorwärts (verdoppeln)
-                this.level = (this.level + 1) + (this.level + 1) - 1;
+                // Debug/Entwicklung: schneller vorwärts
+                do {
+                    this.level++;
+                } while (!this.largeLevels.has(this.level + 1));
             } else {
                 // Normal: inkrementell
                 this.level++;
@@ -234,6 +236,14 @@ export class Game {
         // Periodischer Autosave der historyRaw (alle 3s, nur bei Änderungen)
         this.saveHistoryRaw();
     }
+
+    private largeLevels = new Set<number>([
+        1, 2, 4, 7, 10, 14, 18, 24, 32, 42, 55, 70,
+        90, 116, 150, 190, 244, 311, 396, 506, 644,
+        821, 1045, 1330, 1694, 2155, 2743, 3490, 4441,
+        5649, 7187, 9143, 11628, 14793, 18814, 23935,
+    ]);
+
 
     private render() {
         const w = this.bgCanvas.width;
