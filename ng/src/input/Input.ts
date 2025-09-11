@@ -21,7 +21,6 @@ export class Input {
     private onKeyDown(e: KeyboardEvent) {
         const k = this.normKey(e);
         if (!this.pressed.has(k)) this.pressed.add(k);
-        // Edge immer setzen – damit funktionieren auch Fälle, in denen keyup verpasst wurde
         this.edged.add(k);
     }
 
@@ -31,7 +30,6 @@ export class Input {
     }
 
     consumeStepKey(): 'L' | 'R' | 'U' | 'D' | null {
-        // Priority order to make behavior deterministic
         const dirs: Array<[string[], 'L' | 'R' | 'U' | 'D']> = [
             [["w", "ArrowUp"], 'U'],
             [["s", "ArrowDown"], 'D'],
@@ -41,7 +39,6 @@ export class Input {
         for (const [keys, keyChar] of dirs) {
             for (const k of keys) {
                 if (this.edged.has(k)) {
-                    // consume all direction keys to avoid multiple moves per frame
                     for (const [ks] of dirs) ks.forEach(key => this.edged.delete(key));
                     return keyChar;
                 }
@@ -64,3 +61,4 @@ export class Input {
         return names.some(n => this.pressed.has(n));
     }
 }
+

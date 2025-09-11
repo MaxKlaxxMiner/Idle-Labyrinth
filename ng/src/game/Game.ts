@@ -1,62 +1,52 @@
-import {Laby} from './Laby';
-import {Input} from './Input';
+import {Laby} from '../lib/Laby';
+import {Input} from '../input/Input';
 import {Consts} from './Consts';
-import {Level} from './Level';
-import {Camera} from './Camera';
+import {Level} from '../view/Level';
+import {Camera} from '../view/Camera';
+import {HUDView} from '../ui/HUDView';
 
 export class Game {
     private bgCanvas: HTMLCanvasElement;
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
-    private hudEl: HTMLElement | null = null;
-    private lastHudText = '';
+    private hud!: HUDView;
     private rafId: number | null = null;
     private laby!: Laby;
     private levelView!: Level;
     private static readonly BASE_SEED = 123456;
 
-    // Render invalidation
     private needsRender = true;
 
-    // FPS counter
     private fpsFrames = 0;
     private fpsLastTime = performance.now();
     private fpsValue = 0;
 
-    // Render mode
-    private turbo = false; // false=vsync (RAF), true=Turbo (no-vsync)
+    private turbo = false;
     private fastTimer: number | null = null;
 
-    // Camera mit Dead-Zone
     private camera = new Camera();
 
-    // Input and player state
     private input = new Input();
-    private level = 0; // gameLevel beginnt bei 0
+    private level = 0;
     private player = {x: 1, y: 1, r: 0.35};
     private goal = {x: 0, y: 0};
     private moves = 0;
     private resetLatch = false;
     private history = '';
-    // Vollständige Eingabe-Historie: behält alle Eingaben bei (L/R/U/D/B/M)
-    // B = Backspace/Delete (Undo), M = Marker (Space)
     private historyRaw = '';
-    // Throttle für Autosave der historyRaw
     private lastHistorySaveAt = 0;
     private lastSavedHistoryLen = 0;
     private markers = new Set<number>();
 
-    // Mouse-drag Panning (temporär, bis Mouseup; danach re-centern)
     private dragging = false;
-    private dragStartX = 0; // CSS-Pixel
-    private dragStartY = 0; // CSS-Pixel
-    private dragStartCamX = 0; // Weltpixel
-    private dragStartCamY = 0; // Weltpixel
+    private dragStartX = 0;
+    private dragStartY = 0;
+    private dragStartCamX = 0;
+    private dragStartCamY = 0;
 
     constructor(canvas: HTMLCanvasElement) {
         this.bgCanvas = canvas;
 
-        // Foreground-Canvas erzeugen und überlagern
         const fg = document.createElement('canvas');
         fg.id = 'game-fg';
         fg.style.position = 'absolute';
@@ -69,12 +59,11 @@ export class Game {
         if (!ctx) throw new Error('Canvas 2D Context (fg) nicht verfügbar');
         this.canvas = fg;
         this.ctx = ctx;
-        this.hudEl = document.getElementById('hud');
+        this.hud = new HUDView(document.getElementById('hud') as HTMLElement | null);
         this.levelView = new Level(this.bgCanvas);
 
         const saved = this.loadLevel();
         this.level = Number.isFinite(saved) && saved! >= 0 ? saved! : 0;
-        // Initial: Level setzen, aber historyRaw erst nach optionalem Replay speichern
         this.initLevel(false);
         this.loadHistoryRawAndReplay();
 
@@ -83,7 +72,6 @@ export class Game {
         this.onMouseMove = this.onMouseMove.bind(this);
         this.onMouseUp = this.onMouseUp.bind(this);
         window.addEventListener('resize', this.onResize);
-        // Maus-Eingaben auf dem BG-Canvas abgreifen (FG hat pointer-events: none)
         this.bgCanvas.addEventListener('mousedown', this.onMouseDown);
         window.addEventListener('mousemove', this.onMouseMove);
         window.addEventListener('mouseup', this.onMouseUp);
@@ -108,12 +96,10 @@ export class Game {
     private startRafLoop() {
         const loop = () => {
             this.update();
-            // VSync-Modus: nur rendern, wenn invalidiert
             if (this.needsRender) {
                 this.render();
                 this.needsRender = false;
             }
-            // FPS accounting
             this.fpsFrames++;
             const now = performance.now();
             const dt = now - this.fpsLastTime;
@@ -130,15 +116,12 @@ export class Game {
 
     private startTurboLoop() {
         const loop = () => {
-            // Einmal Game-Update pro Intervall-Tick
             this.update();
-            // Burst‑Rendering bis mindestens 10 ms vergangen sind (Speed‑Test)
             const minTime = performance.now() + 10;
             do {
                 this.render();
                 this.fpsFrames++;
             } while (performance.now() < minTime);
-            // FPS accounting
             const now = performance.now();
             const dt = now - this.fpsLastTime;
             if (dt >= 1000) {
@@ -148,14 +131,11 @@ export class Game {
                 this.updateHud();
             }
         };
-        // setInterval ausprobieren (kann in einigen Situationen weniger geclamped sein)
         this.fastTimer = window.setInterval(loop, 0);
-        // Sofort einen Tick ausführen, damit es direkt losgeht
         loop();
     }
 
     private update() {
-        // Zoom controls (über Camera)
         let zoomChanged = false;
         if (this.input.consumeKey('0')) {
             this.camera.setBestFitZoom();
@@ -168,31 +148,24 @@ export class Game {
         }
         if (zoomChanged) this.needsRender = true;
 
-        // Marker an aktueller Position toggeln (Leertaste)
         if (this.input.consumeKey(' ', 'Space')) this.updatePlayer('M');
 
-        // Undo: Backspace/Delete -> genau einen Schritt zurück (Autorepeat durch Keydown-Repeat)
         if (this.input.consumeKey('Backspace', 'Delete')) {
             this.updatePlayer('B');
         } else {
-            // Discretes Vorwärts-Stepping: pro Tastendruck 1 Knoten (2 Tiles)
             const stepKey = this.input.consumeStepKey();
             if (stepKey) this.updatePlayer(stepKey);
         }
 
-        // Camera dead-zone follow (bei Drag pausieren)
         if (!this.dragging) {
             if (this.camera.updateFollowPlayerTile(this.player.x, this.player.y)) this.needsRender = true;
         }
 
-        // Sofortige Zentrierung auf den Spieler per Enter/NumpadEnter
         if (this.input.consumeKey('Enter', 'NumpadEnter', 'Return')) {
             this.camera.centerOnPlayerTile(this.player.x, this.player.y);
             this.needsRender = true;
         }
 
-        // Reset / Hardreset per Taste 'R'
-        // Detect reset: prefer edge, but allow first-hold fallback with latch
         const resetEdge = this.input.consumeKey('r', 'R');
         const resetHeld = !this.resetLatch && this.input.isPressed('r', 'R');
         if (resetEdge || resetHeld) {
@@ -210,10 +183,8 @@ export class Game {
         }
         if (!this.input.isPressed('r', 'R')) this.resetLatch = false;
 
-        // Toggle Turbo (no-vsync) per Taste 'T'
         if (this.input.consumeKey('t', 'T')) {
             this.turbo = !this.turbo;
-            // sanfter Loop-Wechsel
             setTimeout(() => {
                 this.stop();
                 this.start();
@@ -221,44 +192,30 @@ export class Game {
             this.updateHud();
         }
 
-        // Goal check
         if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
             if (this.isLocalhost()) {
-                // Debug/Entwicklung: schneller vorwärts
                 do {
                     this.level++;
-                } while (!this.largeLevels.has(this.level + 1));
+                } while (!Consts.largeLevels.has(this.level + 1));
             } else {
-                // Normal: inkrementell
                 this.level++;
             }
             this.saveLevel(this.level);
             this.initLevel();
         }
 
-        // Periodischer Autosave der historyRaw (alle 3s, nur bei Änderungen)
         this.saveHistoryRaw();
     }
-
-    private largeLevels = new Set<number>([
-        1, 2, 4, 6, 8, 11, 15, 20, 26, 33, 42, 54, 69, 88,
-        114, 145, 185, 236, 300, 382, 486, 618, 786, 1000,
-        1272, 1618, 2059, 2620, 3333, 4240, 5394, 6861,
-        8728, 11103, 14123, 17965, 22852, 29068, 36975, 47033, 59827, 999999
-    ]);
 
     private render() {
         const w = this.bgCanvas.width;
         const h = this.bgCanvas.height;
-        // FG: Overlays
         this.ctx.clearRect(0, 0, w, h);
 
         const {ox, oy, tileSize: size} = this.camera.getOffsets();
 
-        // BG: labyrinth and overlays via Level (uses its edge sets)
         this.levelView.render(ox, oy, size);
 
-        // Draw goal
         this.ctx.fillStyle = Consts.colors.goal;
         if (size < Consts.sizes.smallTileThreshold) {
             this.ctx.fillRect(ox + this.goal.x * size, oy + this.goal.y * size, size, size);
@@ -266,18 +223,15 @@ export class Game {
             this.ctx.fillRect(ox + this.goal.x * size + size * 0.25, oy + this.goal.y * size + size * 0.25, size * 0.5, size * 0.5);
         }
 
-        // Draw player (yellow circle)
         this.ctx.fillStyle = Consts.colors.player;
         if (size < Consts.sizes.smallTileThreshold) {
             this.ctx.fillRect(ox + this.player.x * size, oy + this.player.y * size, size, size);
         } else {
             this.ctx.beginPath();
-            // Subpixel-Shift um 0.5px für optische Zentrierung
             this.ctx.arc(ox + (this.player.x + 0.5) * size + 0.5, oy + (this.player.y + 0.5) * size + 0.5, this.player.r * size, 0, Math.PI * 2);
             this.ctx.fill();
         }
 
-        // Marker zeichnen (rote Kreise) – über dem Spieler
         this.ctx.fillStyle = Consts.colors.marker;
         for (const key of this.markers) {
             const mx = (key >>> 16) & 0xffff;
@@ -295,14 +249,9 @@ export class Game {
     }
 
     private updateHud() {
-        if (!this.hudEl) return;
         const {tileSize} = this.camera.getOffsets();
         const mode = this.turbo ? 'Turbo' : 'VSync';
-        const hudLine = `Level: ${this.level + 1}  Moves: ${this.moves}  |  Tile: ${tileSize}px (+/- , 0 fit)  |  Move: WASD/↑↓←→  Reset: R  Mark: Space  Center: Enter  |  Mode: ${mode} (T)  |  FPS: ${this.fpsValue}`;
-        if (hudLine !== this.lastHudText) {
-            this.hudEl.textContent = hudLine;
-            this.lastHudText = hudLine;
-        }
+        this.hud.set({ level: this.level + 1, moves: this.moves, tileSize, mode: mode as ('Turbo'|'VSync'), fps: this.fpsValue });
     }
 
     private onResize() {
@@ -310,14 +259,11 @@ export class Game {
         const rect = this.bgCanvas.getBoundingClientRect();
         const w = Math.max(320, Math.floor(rect.width * dpr));
         const h = Math.max(240, Math.floor(rect.height * dpr));
-        // Resize BG via Level
         this.levelView.resize(w, h);
         this.canvas.width = w;
         this.canvas.height = h;
         this.ctx.imageSmoothingEnabled = false;
-        // Camera über neue View informieren
         this.camera.setViewSize(w, h);
-        // Adjust zoom to best fit on resize
         if (this.laby) {
             this.camera.setBestFitZoom();
             this.camera.centerOnPlayerTile(this.player.x, this.player.y);
@@ -325,9 +271,7 @@ export class Game {
         this.needsRender = true;
     }
 
-    // Mouse drag handlers: temporäres Panning, danach re-center
     private onMouseDown(e: MouseEvent) {
-        // Nur linker Button
         if (e.button !== 0) return;
         this.dragging = true;
         this.dragStartX = e.clientX;
@@ -344,7 +288,6 @@ export class Game {
         const dyCss = e.clientY - this.dragStartY;
         const dx = dxCss * dpr;
         const dy = dyCss * dpr;
-        // Drag nach rechts verschiebt Kamera nach links (invertiertes Vorzeichen)
         const changed = this.camera.setCenter(this.dragStartCamX - dx, this.dragStartCamY - dy);
         if (changed) this.needsRender = true;
     }
@@ -352,7 +295,6 @@ export class Game {
     private onMouseUp(_e: MouseEvent) {
         if (!this.dragging) return;
         this.dragging = false;
-        // Nach Loslassen: nur soweit schieben, dass Spieler wieder in Dead-Zone ist
         const {tileSize} = this.camera.getOffsets();
         const px = (this.player.x + 0.5) * tileSize;
         const py = (this.player.y + 0.5) * tileSize;
@@ -361,8 +303,6 @@ export class Game {
     }
 
     private createLabyForLevel(gameLevel: number): Laby {
-        // Größenentwicklung nach Schnipsel: w,h starten bei 5 und wachsen um 2,
-        // gesteuert über das Verhältnis w/h zum goldenen Schnitt.
         let w = 5;
         let h = 5;
         for (let i = 0; i < gameLevel; i++) {
@@ -386,7 +326,6 @@ export class Game {
         this.moves = 0;
         this.history = '';
         this.historyRaw = '';
-        // Sofort speichern bei Restart/Levelwechsel (leerer Verlauf)
         if (saveImmediate) this.saveHistoryRaw(true);
         this.player.x = 1;
         this.player.y = 1;
@@ -396,15 +335,12 @@ export class Game {
         this.levelView.setLaby(this.laby);
         this.levelView.clearHighlights();
 
-        // Camera: Weltmaße setzen, Best-Fit und zentrieren
         this.camera.setWorldSize(this.laby.pixWidth, this.laby.pixHeight);
         this.camera.setBestFitZoom();
         this.camera.centerOnPlayerTile(this.player.x, this.player.y);
         this.needsRender = true;
     }
 
-    // Verarbeitet Spieler-relevante Eingaben (Rohcodes):
-    // 'L','R','U','D' = Bewegungen; 'B' = Backspace/Undo; 'M' = Marker toggle
     private updatePlayer(inputKey: 'L' | 'R' | 'U' | 'D' | 'B' | 'M') {
         if (inputKey === 'M') {
             this.historyRaw += 'M';
@@ -437,7 +373,6 @@ export class Game {
             return;
         }
 
-        // Bewegungen
         let dx = 0, dy = 0;
         if (inputKey === 'L') dx = -1;
         else if (inputKey === 'R') dx = 1;
@@ -462,8 +397,7 @@ export class Game {
             (last === 'U' && inputKey === 'D') ||
             (last === 'D' && inputKey === 'U');
 
-        // dx,dy are -1/0/1; cells to update need +/-1 positions
-        const cx = dx; // center step delta (±1 on axis)
+        const cx = dx;
         const cy = dy;
 
         if (isUndo) {
@@ -505,8 +439,7 @@ export class Game {
     private saveLevel(level: number) {
         try {
             localStorage.setItem('idle-laby-level', String(level));
-        } catch {
-        }
+        } catch {}
     }
 
     private loadLevel(): number | null {
@@ -520,23 +453,19 @@ export class Game {
         }
     }
 
-    // Speichert historyRaw throttled (>=3s Abstand) oder erzwungen sofort
     private saveHistoryRaw(force = false) {
         try {
             const now = performance.now();
             if (!force) {
-                if (this.historyRaw.length === this.lastSavedHistoryLen) return; // keine Änderung
-                if (now - this.lastHistorySaveAt < 3000) return; // Throttle 3s
+                if (this.historyRaw.length === this.lastSavedHistoryLen) return;
+                if (now - this.lastHistorySaveAt < 3000) return;
             }
             localStorage.setItem('idle-laby-historyRaw', this.historyRaw);
             this.lastSavedHistoryLen = this.historyRaw.length;
             this.lastHistorySaveAt = now;
-        } catch {
-            // ignorieren (z. B. Storage deaktiviert)
-        }
+        } catch {}
     }
 
-    // Lädt ggf. gespeicherte historyRaw und spielt sie mittels updatePlayer() ab
     private loadHistoryRawAndReplay() {
         try {
             const raw = localStorage.getItem('idle-laby-historyRaw');
@@ -547,12 +476,9 @@ export class Game {
                     this.updatePlayer(c);
                 }
             }
-            // Nach Replay Kamera auf Spieler zentrieren, Render anstoßen
             this.camera.centerOnPlayerTile(this.player.x, this.player.y);
             this.needsRender = true;
-        } catch {
-            // ignorieren
-        }
+        } catch {}
     }
 
     private isLocalhost(): boolean {

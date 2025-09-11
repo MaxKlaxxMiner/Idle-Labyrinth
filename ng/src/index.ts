@@ -1,6 +1,6 @@
 import './styles.css';
 
-import {Game} from './lib/Game';
+import {Game} from './game/Game';
 
 function bootstrap() {
     const canvas = document.getElementById('game') as HTMLCanvasElement | null;
@@ -21,4 +21,3 @@ if (document.readyState === 'loading') {
 } else {
     bootstrap();
 }
-
