@@ -7,13 +7,36 @@
     <meta name="description" content="Idle Labyrinth – Web Idle Game" />
     <style>
       html, body { height: 100%; margin: 0; }
-      body { background: #111; color: #eaeaea; font-family: Inter, system-ui, Arial, sans-serif; }
-      canvas#game, canvas#game-fg { width: 100vw; height: 100vh; image-rendering: pixelated; display: block; }
+      body { background: #111; color: #eaeaea; font-family: Inter, system-ui, Arial, sans-serif; overflow: hidden; }
+
+      #hud {
+        height: 24px;
+        line-height: 19px;
+        font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        color: #eaeaea;
+        padding: 5px 8px 0 8px;
+        box-sizing: border-box;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        user-select: none;
+        position: relative;
+        z-index: 2;
+        width: 100%;
+      }
+      /* Spielbereich: Fensterhöhe minus HUD (24px) */
+      #game-wrap { position: relative; height: calc(100vh - 24px); }
+      canvas#game, canvas#game-fg { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
       canvas#game { background: #0a0a0a; }
       canvas#game-fg { background: transparent; }
     </style>
   </head>
   <body>
-    <canvas id="game" width="480" height="320"></canvas>
+    <div id="app">
+      <div id="hud"></div>
+      <div id="game-wrap">
+        <canvas id="game" width="480" height="320"></canvas>
+      </div>
+    </div>
   </body>
   </html>

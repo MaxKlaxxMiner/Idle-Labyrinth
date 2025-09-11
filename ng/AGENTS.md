@@ -16,6 +16,7 @@ Dieser Leitfaden beschreibt, wie Beiträge in diesem Projekt erfolgen sollen.
 - Änderungen möglichst klein und fokussiert halten.
 - Größere Aufgaben vorab aufteilen/planen (Schritte definieren), dann inkrementell umsetzen.
 - Erst planen, dann implementieren; frühe Zwischenschritte bevorzugen, um Feedback zu ermöglichen.
+- Kommentare neutral und zeitlos formulieren (keine Formulierungen wie „nicht mehr“, „neu“, „vorher“ o. Ä.).
 
 ## Git & Commits
 - Branch: direkte lokale Commits auf `master` sind erlaubt.

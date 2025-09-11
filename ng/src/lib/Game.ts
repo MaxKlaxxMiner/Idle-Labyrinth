@@ -5,10 +5,11 @@ import {Level} from './Level';
 import {Camera} from './Camera';
 
 export class Game {
-    // Background bgCanvas is managed by Level
     private bgCanvas: HTMLCanvasElement;
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
+    private hudEl: HTMLElement | null = null;
+    private lastHudText = '';
     private rafId: number | null = null;
     private laby!: Laby;
     private levelView!: Level;
@@ -68,6 +69,7 @@ export class Game {
         if (!ctx) throw new Error('Canvas 2D Context (fg) nicht verfügbar');
         this.canvas = fg;
         this.ctx = ctx;
+        this.hudEl = document.getElementById('hud');
         this.levelView = new Level(this.bgCanvas);
 
         const saved = this.loadLevel();
@@ -119,7 +121,7 @@ export class Game {
                 this.fpsValue = Math.round((this.fpsFrames * 1000) / dt);
                 this.fpsFrames = 0;
                 this.fpsLastTime = now;
-                this.needsRender = true; // HUD-Aktualisierung
+                this.updateHud();
             }
             this.rafId = requestAnimationFrame(loop);
         };
@@ -143,6 +145,7 @@ export class Game {
                 this.fpsValue = Math.round((this.fpsFrames * 1000) / dt);
                 this.fpsFrames = 0;
                 this.fpsLastTime = now;
+                this.updateHud();
             }
         };
         // setInterval ausprobieren (kann in einigen Situationen weniger geclamped sein)
@@ -215,7 +218,7 @@ export class Game {
                 this.stop();
                 this.start();
             }, 0);
-            this.needsRender = true;
+            this.updateHud();
         }
 
         // Goal check
@@ -288,13 +291,18 @@ export class Game {
             }
         }
 
-        // HUD (foreground) - single line
-        this.ctx.fillStyle = Consts.colors.hudText;
-        this.ctx.font = Consts.sizes.hudFont;
-        this.ctx.textBaseline = 'top';
+        this.updateHud();
+    }
+
+    private updateHud() {
+        if (!this.hudEl) return;
+        const {tileSize} = this.camera.getOffsets();
         const mode = this.turbo ? 'Turbo' : 'VSync';
-        const hudLine = `Level: ${this.level + 1}  Moves: ${this.moves}  |  Tile: ${size}px (+/- , 0 fit)  |  Move: WASD/↑↓←→  Reset: R  Mark: Space  Center: Enter  |  Mode: ${mode} (T)  |  FPS: ${this.fpsValue}`;
-        this.ctx.fillText(hudLine, 8, 8);
+        const hudLine = `Level: ${this.level + 1}  Moves: ${this.moves}  |  Tile: ${tileSize}px (+/- , 0 fit)  |  Move: WASD/↑↓←→  Reset: R  Mark: Space  Center: Enter  |  Mode: ${mode} (T)  |  FPS: ${this.fpsValue}`;
+        if (hudLine !== this.lastHudText) {
+            this.hudEl.textContent = hudLine;
+            this.lastHudText = hudLine;
+        }
     }
 
     private onResize() {
