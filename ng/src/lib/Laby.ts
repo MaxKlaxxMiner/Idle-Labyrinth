@@ -188,7 +188,7 @@ export class Laby {
         if ((x & 1) === 0 && (y & 1) === 0) return false;
         const pos = (x >> 1) + (y >> 1) * this.width;
         if ((x & 1) === 0) {
-        // Vertikale Kante: frei, wenn keine vertikale Wand
+            // Vertikale Kante: frei, wenn keine vertikale Wand
             return !this.getVWall(pos);
         } else if ((y & 1) === 0) {
             // Horizontale Kante: frei, wenn keine horizontale Wand

@@ -1,9 +1,9 @@
-import {Laby} from '../lib/Laby';
-import {Input} from '../input/Input';
+import {Laby} from '@/lib/Laby';
+import {Input} from '@/input/Input';
 import {Consts} from './Consts';
-import {Level} from '../view/Level';
-import {Camera} from '../view/Camera';
-import {HUDView} from '../ui/HUDView';
+import {Level} from '@/view/Level';
+import {Camera} from '@/view/Camera';
+import {HUDView} from '@/ui/HUDView';
 
 export class Game {
     private bgCanvas: HTMLCanvasElement;
@@ -276,7 +276,7 @@ export class Game {
     private updateHud() {
         const {tileSize} = this.camera.getOffsets();
         const mode = this.turbo ? 'Turbo' : 'VSync';
-        this.hud.set({ level: this.level + 1, moves: this.moves, tileSize, mode: mode as ('Turbo'|'VSync'), fps: this.fpsValue });
+        this.hud.set({level: this.level + 1, moves: this.moves, tileSize, mode: mode as ('Turbo' | 'VSync'), fps: this.fpsValue});
     }
 
     private onResize() {
@@ -393,8 +393,6 @@ export class Game {
             const nx = this.player.x + dx * 2;
             const ny = this.player.y + dy * 2;
             if (!this.canStepTo(this.player.x, this.player.y, nx, ny)) return;
-            this.levelView.clearCell(nx - dx * 2, ny - dy * 2, true);
-            this.levelView.clearCell(nx - dx, ny - dy, true);
             this.levelView.markCell(nx - dx * 2, ny - dy * 2, false);
             this.levelView.markCell(nx - dx, ny - dy, false);
             this.player.x = nx;
@@ -435,15 +433,11 @@ export class Game {
         const cy = dy;
 
         if (isUndo) {
-            this.levelView.clearCell(nx - cx, ny - cy, true);
-            this.levelView.clearCell(prevX, prevY, true);
             this.levelView.markCell(nx - cx, ny - cy, false);
             this.levelView.markCell(prevX, prevY, false);
             this.history = this.history.slice(0, -1);
             this.moves = Math.max(0, this.moves - 1);
         } else {
-            this.levelView.clearCell(nx - cx, ny - cy, false);
-            this.levelView.clearCell(nx, ny, false);
             this.levelView.markCell(nx - cx, ny - cy, true);
             this.levelView.markCell(nx, ny, true);
             this.history += inputKey;
@@ -473,7 +467,8 @@ export class Game {
     private saveLevel(level: number) {
         try {
             localStorage.setItem('idle-laby-level', String(level));
-        } catch {}
+        } catch {
+        }
     }
 
     private loadLevel(): number | null {
@@ -498,7 +493,8 @@ export class Game {
             localStorage.setItem('idle-laby-historyRaw', this.historyRaw);
             this.lastSavedHistoryLen = this.historyRaw.length;
             this.lastHistorySaveAt = now;
-        } catch {}
+        } catch {
+        }
     }
 
     // Lädt ggf. gespeicherte historyRaw und spielt sie mittels updatePlayer() ab
@@ -515,7 +511,8 @@ export class Game {
             // Nach Replay Kamera auf Spieler zentrieren, Render anstoßen
             this.camera.centerOnPlayerTile(this.player.x, this.player.y);
             this.needsRender = true;
-        } catch {}
+        } catch {
+        }
     }
 
     private isLocalhost(): boolean {

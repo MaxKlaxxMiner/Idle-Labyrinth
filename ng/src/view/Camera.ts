@@ -1,4 +1,4 @@
-import {Consts} from '../game/Consts';
+import {Consts} from '@/game/Consts';
 
 export class Camera {
     private _camX = 0;
@@ -69,7 +69,7 @@ export class Camera {
         this.setTileSizeIndex(idx);
     }
 
-    // Komfort: zentriere/folge anhand gespeicherter Größen
+    // Komfort: zentriere/folge anhand gespeicherter GrÃ¶ÃŸen
     centerOnPlayerTile(tileX: number, tileY: number) {
         const ts = this.tileSize;
         const playerPx = (tileX + 0.5) * ts;
@@ -92,7 +92,7 @@ export class Camera {
         if (worldH <= viewH) this._camY = worldH / 2; else this._camY = this.clamp(playerPy, viewH / 2, worldH - viewH / 2);
     }
 
-    // Dead-Zone-Follow: Kamera nur bewegen, wenn Spieler die Dead-Zone verlässt
+    // Dead-Zone-Follow: Kamera nur bewegen, wenn Spieler die Dead-Zone verlÃ¤sst
     updateFollow(playerPx: number, playerPy: number, viewW: number, viewH: number, worldW: number, worldH: number): boolean {
         let changed = false;
         let targetCamX = this._camX;
@@ -208,4 +208,3 @@ export class Camera {
         return Math.max(min, Math.min(max, v));
     }
 }
-

@@ -1,5 +1,5 @@
-import {Consts} from '../game/Consts';
-import {Laby} from '../lib/Laby';
+import {Consts} from '@/game/Consts';
+import {Laby} from '@/lib/Laby';
 
 export class Level {
     private canvas: HTMLCanvasElement;
@@ -72,7 +72,7 @@ export class Level {
         this.u32[p] = history ? this.trail32 : this.back32;
     }
 
-    clearCell(x: number, y: number, history: boolean) {
+    clearCell(x: number, y: number) {
         if (!this.u32) return;
         const p = this.cellKey(x, y);
         if (p < 0) return;
