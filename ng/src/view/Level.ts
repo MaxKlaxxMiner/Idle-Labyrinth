@@ -6,12 +6,14 @@ export class Level {
     private ctx: CanvasRenderingContext2D;
 
     private laby!: Laby;
+    // Pixel-basierte Hintergrund-Bitmap (1px = 1 Zelle)
     private pixCanvas: HTMLCanvasElement | null = null;
     private pixCtx: CanvasRenderingContext2D | null = null;
     private imgData: ImageData | null = null;
     private u32: Uint32Array | null = null;
     private pixW = 0;
     private pixH = 0;
+    // Farbcache (gepackte Uint32‑Werte)
     private bg32 = 0;
     private wall32 = 0;
     private trail32 = 0;
@@ -28,6 +30,7 @@ export class Level {
 
     setLaby(laby: Laby) {
         this.laby = laby;
+        // Bitmap gemäß Laby‑Pixelmaßen (pixWidth x pixHeight) anlegen/erneuern
         this.pixW = this.laby.pixWidth;
         this.pixH = this.laby.pixHeight;
         const c = document.createElement('canvas');
@@ -40,7 +43,9 @@ export class Level {
         this.pixCtx = pctx;
         this.imgData = pctx.createImageData(this.pixW, this.pixH);
         this.u32 = new Uint32Array(this.imgData.data.buffer, 0, this.pixW * this.pixH);
+        // Debug-Ausgabe: Pixelabmessungen des Labyrinths
         console.log(`Level: Bitmap-Größe ${this.pixW} x ${this.pixH} Pixel`);
+        // Farben einmalig packen
         this.bg32 = this.parseColor(Consts.colors.background);
         this.wall32 = this.parseColor(Consts.colors.wall);
         this.trail32 = this.parseColor(Consts.colors.trail);
@@ -54,9 +59,10 @@ export class Level {
         this.ctx.imageSmoothingEnabled = false;
     }
 
+    // Tile/Path API (direkter Pixeleingriff)
     clearHighlights() {
         this.drawBase();
-        this.markCell(1, 1, true);
+        this.markCell(1, 1, true); // Startfeld pauschal markieren
     }
 
     markCell(x: number, y: number, history: boolean) {
@@ -79,36 +85,43 @@ export class Level {
         return y * this.pixW + x;
     }
 
+    // Draw labyrinth + overlays in 1px-Bitmap und anschließend skaliert blitten
     render(ox: number, oy: number, tileSize: number) {
         const w = this.canvas.width;
         const h = this.canvas.height;
         this.ctx.clearRect(0, 0, w, h);
 
         if (!this.pixCtx || !this.imgData) return;
+        // Auf Pixel-Canvas schreiben und skaliert blitten
         this.pixCtx.putImageData(this.imgData, 0, 0);
         this.ctx.imageSmoothingEnabled = false;
         this.ctx.drawImage(this.pixCanvas!, 0, 0, this.pixW, this.pixH, ox, oy, this.pixW * tileSize, this.pixH * tileSize);
 
+        // Gaps (1px) zwischen den Zellen/NODES optional überlagern
         if (tileSize >= Consts.sizes.gapThreshold) {
             this.drawGaps(ox, oy, tileSize);
         }
     }
 
+    // Zeichnet 1px-Linien in Hintergrundfarbe zwischen allen Zellen (sichtbare Abstände)
     private drawGaps(ox: number, oy: number, tileSize: number) {
         const ctx = this.ctx;
         const totalW = this.pixW * tileSize;
         const totalH = this.pixH * tileSize;
         ctx.fillStyle = Consts.colors.background;
+        // Vertikale Gaps
         for (let x = 1; x < this.pixW; x++) {
             const dx = ox + x * tileSize;
             ctx.fillRect(dx, oy, 1, totalH);
         }
+        // Horizontale Gaps
         for (let y = 1; y < this.pixH; y++) {
             const dy = oy + y * tileSize;
             ctx.fillRect(ox, dy, totalW, 1);
         }
     }
 
+    // Grundbild (Labyrinth ohne Overlays) in das U32‑Abbild schreiben
     private drawBase() {
         if (!this.u32) return;
         let idx = 0;
@@ -120,6 +133,7 @@ export class Level {
         }
     }
 
+    // '#rrggbb' oder 'rgba(r,g,b,a)' → packed Uint32 (Endianness berücksichtigt)
     private parseColor(s: string): number {
         if (s.startsWith('#')) {
             const r = parseInt(s.slice(1, 3), 16);
@@ -138,6 +152,7 @@ export class Level {
         return this.packRGBA(0, 0, 0, 255);
     }
 
+    // RGBA (Bytewerte 0..255) zu Uint32 passend zur Endianness des Systems packen
     private packRGBA(r: number, g: number, b: number, a: number): number {
         if (Level.isLittleEndian === null) {
             const test = new Uint32Array([0x11223344]);

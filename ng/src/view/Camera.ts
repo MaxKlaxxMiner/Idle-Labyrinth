@@ -69,6 +69,7 @@ export class Camera {
         this.setTileSizeIndex(idx);
     }
 
+    // Komfort: zentriere/folge anhand gespeicherter Größen
     centerOnPlayerTile(tileX: number, tileY: number) {
         const ts = this.tileSize;
         const playerPx = (tileX + 0.5) * ts;
@@ -85,16 +86,19 @@ export class Camera {
         return this.updateFollow(playerPx, playerPy, this.viewW, this.viewH, worldW, worldH);
     }
 
+    // Auf Spieler zentrieren, mit Begrenzung auf Weltgrenzen
     centerOn(playerPx: number, playerPy: number, viewW: number, viewH: number, worldW: number, worldH: number) {
         if (worldW <= viewW) this._camX = worldW / 2; else this._camX = this.clamp(playerPx, viewW / 2, worldW - viewW / 2);
         if (worldH <= viewH) this._camY = worldH / 2; else this._camY = this.clamp(playerPy, viewH / 2, worldH - viewH / 2);
     }
 
+    // Dead-Zone-Follow: Kamera nur bewegen, wenn Spieler die Dead-Zone verlässt
     updateFollow(playerPx: number, playerPy: number, viewW: number, viewH: number, worldW: number, worldH: number): boolean {
         let changed = false;
         let targetCamX = this._camX;
         let targetCamY = this._camY;
 
+        // Horizontal
         if (worldW <= viewW) {
             targetCamX = worldW / 2;
         } else {
@@ -108,6 +112,7 @@ export class Camera {
             targetCamX = this.clamp(targetCamX, minX, maxX);
         }
 
+        // Vertikal
         if (worldH <= viewH) {
             targetCamY = worldH / 2;
         } else {
@@ -132,6 +137,7 @@ export class Camera {
         return changed;
     }
 
+    // View-Offsets basierend auf internem Zustand
     getOffsets(): { ox: number; oy: number; tileSize: number } {
         const viewW = this.viewW, viewH = this.viewH;
         const {worldW, worldH} = this.getWorldPixelSize();
@@ -142,10 +148,12 @@ export class Camera {
         return {ox, oy, tileSize: this.tileSize};
     }
 
+    // Direkter Zugriff auf Kamerazentrum (in Weltpixeln)
     getCenter(): { camX: number; camY: number } {
         return {camX: this._camX, camY: this._camY};
     }
 
+    // Setzt Kamerazentrum (in Weltpixeln) mit Begrenzung auf Weltgrenzen
     setCenter(camX: number, camY: number): boolean {
         const {worldW, worldH} = this.getWorldPixelSize();
         let nx = camX;
@@ -158,11 +166,13 @@ export class Camera {
         return changed;
     }
 
+    // Schiebt die Kamera minimal, sodass der Spieler innerhalb der Dead-Zone liegt
     ensurePlayerInsideDeadZone(playerPx: number, playerPy: number): boolean {
         const {worldW, worldH} = this.getWorldPixelSize();
         let targetCamX = this._camX;
         let targetCamY = this._camY;
 
+        // Horizontal
         if (worldW <= this.viewW) {
             targetCamX = worldW / 2;
         } else {
@@ -175,6 +185,7 @@ export class Camera {
             targetCamX = this.clamp(targetCamX, minX, maxX);
         }
 
+        // Vertikal
         if (worldH <= this.viewH) {
             targetCamY = worldH / 2;
         } else {
