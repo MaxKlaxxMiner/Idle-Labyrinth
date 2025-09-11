@@ -21,13 +21,13 @@ export class Game {
     private fpsLastTime = performance.now();
     private fpsValue = 0;
 
-    // Render mode
-    private turbo = false; // false=vsync (RAF), true=Turbo (no-vsync)
+    // Rendermodus
+    private turbo = false; // false=VSync (RAF), true=Turbo (ohne VSync)
     private fastTimer: number | null = null;
 
     private camera = new Camera();
 
-    // Input and player state
+    // Eingabe und Spielerzustand
     private input = new Input();
     private level = 0; // gameLevel beginnt bei 0
     private player = {x: 1, y: 1, r: 0.35};
@@ -123,7 +123,7 @@ export class Game {
     private startTurboLoop() {
         const loop = () => {
             this.update();
-            // Burst‑Rendering bis mindestens 10 ms vergangen sind (Speed‑Test)
+            // Burst-Rendering bis mindestens 10 ms vergangen sind (Speed-Test)
             const minTime = performance.now() + 10;
             do {
                 this.render();
@@ -143,7 +143,7 @@ export class Game {
     }
 
     private update() {
-        // Zoom controls (über Camera)
+        // Zoom-Steuerung (über Camera)
         let zoomChanged = false;
         if (this.input.consumeKey('0')) {
             this.camera.setBestFitZoom();
@@ -163,24 +163,24 @@ export class Game {
         if (this.input.consumeKey('Backspace', 'Delete')) {
             this.updatePlayer('B');
         } else {
-            // Discretes Vorwärts-Stepping: pro Tastendruck 1 Knoten (2 Tiles)
+            // Diskretes Vorwärts-Stepping: pro Tastendruck 1 Knoten (2 Tiles)
             const stepKey = this.input.consumeStepKey();
             if (stepKey) this.updatePlayer(stepKey);
         }
 
-        // Camera dead-zone follow (bei Drag pausieren)
+        // Kamera-Follow mit Dead-Zone (bei Drag pausieren)
         if (!this.dragging) {
             if (this.camera.updateFollowPlayerTile(this.player.x, this.player.y)) this.needsRender = true;
         }
 
-        // Sofortige Zentrierung auf den Spieler per Enter/NumpadEnter
+        // Sofort auf Spieler zentrieren (Enter/NumpadEnter)
         if (this.input.consumeKey('Enter', 'NumpadEnter', 'Return')) {
             this.camera.centerOnPlayerTile(this.player.x, this.player.y);
             this.needsRender = true;
         }
 
-        // Reset / Hardreset per Taste 'R'
-        // Detect reset: prefer edge, but allow first-hold fallback with latch
+        // Reset/Hardreset per Taste 'R'
+        // Reset-Erkennung: bevorzugt Edge; Fallback bei gehaltenem Key via Latch
         const resetEdge = this.input.consumeKey('r', 'R');
         const resetHeld = !this.resetLatch && this.input.isPressed('r', 'R');
         if (resetEdge || resetHeld) {
@@ -198,7 +198,7 @@ export class Game {
         }
         if (!this.input.isPressed('r', 'R')) this.resetLatch = false;
 
-        // Toggle Turbo (no-vsync) per Taste 'T'
+        // Turbo (ohne VSync) umschalten per Taste 'T'
         if (this.input.consumeKey('t', 'T')) {
             this.turbo = !this.turbo;
             // sanfter Loop-Wechsel
@@ -209,10 +209,10 @@ export class Game {
             this.updateHud();
         }
 
-        // Goal check
+        // Ziel erreicht?
         if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
             if (this.isLocalhost()) {
-                // Debug/Entwicklung: schneller vorwärts
+                // Entwicklung: schneller vorwärts
                 do {
                     this.level++;
                 } while (!Consts.largeLevels.has(this.level + 1));
@@ -224,7 +224,7 @@ export class Game {
             this.initLevel();
         }
 
-        // Periodischer Autosave der historyRaw (alle 3s, nur bei Änderungen)
+        // Periodischer Autosave der historyRaw (alle 3 s, nur bei Änderungen)
         this.saveHistoryRaw();
     }
 
@@ -235,10 +235,10 @@ export class Game {
 
         const {ox, oy, tileSize: size} = this.camera.getOffsets();
 
-        // BG: labyrinth and overlays via Level (uses its edge sets)
+        // BG: Labyrinth + Overlays über Level
         this.levelView.render(ox, oy, size);
 
-        // Draw goal
+        // Ziel zeichnen
         this.ctx.fillStyle = Consts.colors.goal;
         if (size < Consts.sizes.smallTileThreshold) {
             this.ctx.fillRect(ox + this.goal.x * size, oy + this.goal.y * size, size, size);
@@ -246,7 +246,7 @@ export class Game {
             this.ctx.fillRect(ox + this.goal.x * size + size * 0.25, oy + this.goal.y * size + size * 0.25, size * 0.5, size * 0.5);
         }
 
-        // Draw player (yellow circle)
+        // Spieler zeichnen (gelber Kreis)
         this.ctx.fillStyle = Consts.colors.player;
         if (size < Consts.sizes.smallTileThreshold) {
             this.ctx.fillRect(ox + this.player.x * size, oy + this.player.y * size, size, size);
@@ -256,7 +256,7 @@ export class Game {
             this.ctx.fill();
         }
 
-        // Marker zeichnen (rote Kreise) – über dem Spieler
+        // Marker zeichnen (rote Kreise) - über dem Spieler
         this.ctx.fillStyle = Consts.colors.marker;
         for (const key of this.markers) {
             const mx = (key >>> 16) & 0xffff;

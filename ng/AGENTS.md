@@ -17,6 +17,7 @@ Dieser Leitfaden beschreibt, wie Beiträge in diesem Projekt erfolgen sollen.
 - Größere Aufgaben vorab aufteilen/planen (Schritte definieren), dann inkrementell umsetzen.
 - Erst planen, dann implementieren; frühe Zwischenschritte bevorzugen, um Feedback zu ermöglichen.
 - Kommentare neutral und zeitlos formulieren (keine Formulierungen wie „nicht mehr“, „neu“, „vorher“ o. Ä.).
+ - Sonderzeichen: in Kommentaren/Dokumentation Standard-Zeichen verwenden (z. B. normales Minus statt Gedankenstriche, keine Pfeil-Symbole). Sprachspezifische Zeichen (ä, ö, ü, ß etc.) sind ausdrücklich erlaubt. Unicode nur, wenn es zum Spiel selbst gehört oder sprachlich notwendig ist.
 
 ## Git & Commits
 - Branch: direkte lokale Commits auf `master` sind erlaubt.

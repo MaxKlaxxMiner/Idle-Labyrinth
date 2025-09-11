@@ -13,7 +13,7 @@ export class Level {
     private u32: Uint32Array | null = null;
     private pixW = 0;
     private pixH = 0;
-    // Farbcache (gepackte Uint32‑Werte)
+    // Farbcache (gepackte Uint32-Werte)
     private bg32 = 0;
     private wall32 = 0;
     private trail32 = 0;
@@ -30,7 +30,7 @@ export class Level {
 
     setLaby(laby: Laby) {
         this.laby = laby;
-        // Bitmap gemäß Laby‑Pixelmaßen (pixWidth x pixHeight) anlegen/erneuern
+        // Bitmap gemäß Laby-Pixelmaßen (pixWidth x pixHeight) anlegen/erneuern
         this.pixW = this.laby.pixWidth;
         this.pixH = this.laby.pixHeight;
         const c = document.createElement('canvas');
@@ -121,7 +121,7 @@ export class Level {
         }
     }
 
-    // Grundbild (Labyrinth ohne Overlays) in das U32‑Abbild schreiben
+    // Grundbild (Labyrinth ohne Overlays) in das U32-Abbild schreiben
     private drawBase() {
         if (!this.u32) return;
         let idx = 0;
@@ -133,7 +133,7 @@ export class Level {
         }
     }
 
-    // '#rrggbb' oder 'rgba(r,g,b,a)' → packed Uint32 (Endianness berücksichtigt)
+    // '#rrggbb' oder 'rgba(r,g,b,a)' -> packed Uint32 (Endianness berücksichtigt)
     private parseColor(s: string): number {
         if (s.startsWith('#')) {
             const r = parseInt(s.slice(1, 3), 16);
@@ -167,4 +167,3 @@ export class Level {
 
     private static isLittleEndian: boolean | null = null;
 }
-

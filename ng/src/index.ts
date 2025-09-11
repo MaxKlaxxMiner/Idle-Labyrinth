@@ -11,7 +11,7 @@ function bootstrap() {
     const game = new Game(canvas);
     game.start();
 
-    // Debug global hook (convenient while early prototyping)
+    // Debug-Hook (praktisch beim frühen Prototyping)
     // @ts-expect-error
     window.__game = game;
 }

@@ -180,21 +180,21 @@ export class Laby {
         this.getVWall = getVWall;
     }
 
-    // Grid‑Helper: true, wenn Tile (x,y) begehbar ist
+    // Grid-Helper: true, wenn Tile (x,y) begehbar ist
     // Koordinaten im expandierten Raster: pixWidth x pixHeight
     isFree(x: number, y: number): boolean {
         if (x < 0 || y < 0 || x >= this.pixWidth || y >= this.pixHeight) return false;
-        // Intersections are walls
+        // Kreuzungen sind Wände
         if ((x & 1) === 0 && (y & 1) === 0) return false;
         const pos = (x >> 1) + (y >> 1) * this.width;
         if ((x & 1) === 0) {
-            // vertical edge: free if no vertical wall
+        // Vertikale Kante: frei, wenn keine vertikale Wand
             return !this.getVWall(pos);
         } else if ((y & 1) === 0) {
-            // horizontal edge: free if no horizontal wall
+            // Horizontale Kante: frei, wenn keine horizontale Wand
             return !this.getHWall(pos);
         } else {
-            // cell interior
+            // Zelleninneres
             return true;
         }
     }
