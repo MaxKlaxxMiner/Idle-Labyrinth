@@ -87,19 +87,39 @@ export class Level {
         const h = this.canvas.height;
         this.ctx.clearRect(0, 0, w, h);
 
-        // Alle Chunks aktualisieren und blitten
+        // Sichtbaren Pixelbereich (in Laby-Pixelkoordinaten) bestimmen
+        // x sichtbar, wenn [ox + x*tileSize, ox + (x+1)*tileSize) mit [0,w) schneidet
+        // y analog
+        const visX0 = Math.max(0, Math.floor((0 - ox) / tileSize));
+        const visY0 = Math.max(0, Math.floor((0 - oy) / tileSize));
+        const visX1 = Math.min(this.pixW - 1, Math.ceil((w - ox) / tileSize) - 1);
+        const visY1 = Math.min(this.pixH - 1, Math.ceil((h - oy) / tileSize) - 1);
+
+        if (visX0 > visX1 || visY0 > visY1) return;
+
+        // Sichtbare Chunk-Indizes ermitteln (je 256er Blöcke)
+        const c0x = visX0 >> 8;
+        const c0y = visY0 >> 8;
+        const c1x = visX1 >> 8;
+        const c1y = visY1 >> 8;
+
+        // Nur sichtbare Chunks aktualisieren und blitten
         this.ctx.imageSmoothingEnabled = false;
-        for (let cy = 0; cy < this.chunksY; cy++) {
-            for (let cx = 0; cx < this.chunksX; cx++) {
+        for (let cy = c0y; cy <= c1y; cy++) {
+            for (let cx = c0x; cx <= c1x; cx++) {
                 const chunk = this.chunks[cy * this.chunksX + cx];
-                // Effektive Breite/Höhe innerhalb des Labyrinths beschränken
-                const sx = 0, sy = 0;
-                const sw = Math.max(0, Math.min(256, this.pixW - chunk.ofsX));
-                const sh = Math.max(0, Math.min(256, this.pixH - chunk.ofsY));
+                if (!chunk) continue;
+                // Sichtbaren Quellbereich innerhalb des Chunks bestimmen
+                const sx = Math.max(0, visX0 - chunk.ofsX);
+                const sy = Math.max(0, visY0 - chunk.ofsY);
+                const ex = Math.min(256, visX1 - chunk.ofsX + 1); // exklusiv
+                const ey = Math.min(256, visY1 - chunk.ofsY + 1);
+                const sw = ex - sx;
+                const sh = ey - sy;
                 if (sw <= 0 || sh <= 0) continue;
                 chunk.put();
-                const dx = ox + chunk.ofsX * tileSize;
-                const dy = oy + chunk.ofsY * tileSize;
+                const dx = ox + (chunk.ofsX + sx) * tileSize;
+                const dy = oy + (chunk.ofsY + sy) * tileSize;
                 const dw = sw * tileSize;
                 const dh = sh * tileSize;
                 chunk.drawTo(this.ctx, sx, sy, sw, sh, dx, dy, dw, dh);
@@ -132,12 +152,30 @@ export class Level {
 
     // Grundbild (Labyrinth ohne Overlays) in das U32-Abbild schreiben
     private drawBase() {
-        for (let y = 0; y < this.pixH; y++) {
-            for (let x = 0; x < this.pixW; x++) {
-                const free = this.laby.isFree(x, y)
-                this.setPixel(x, y, free ? this.bg32 : this.wall32)
-            }
+        for (let i = 0; i < this.chunks.length; i++) {
+            this.drawBaseChunk(this.chunks[i]);
         }
+    }
+
+    // Malt das Grundbild für einen einzelnen 256x256-Chunk
+    private drawBaseChunk(chunk: PixBuffer256) {
+        // Sichtbare Grenzen innerhalb des Labyrinths (Clipping am Rand)
+        const x0 = chunk.ofsX;
+        const y0 = chunk.ofsY;
+        const x1 = Math.min(this.pixW, x0 + 256);
+        const y1 = Math.min(this.pixH, y0 + 256);
+        if (x0 >= x1 || y0 >= y1) return;
+        const u32 = chunk.u32;
+        let idxRowStart = 0;
+        for (let y = y0; y < y1; y++) {
+            let idx = idxRowStart;
+            for (let x = x0; x < x1; x++) {
+                const free = this.laby.isFree(x, y);
+                u32[idx++] = free ? this.bg32 : this.wall32;
+            }
+            idxRowStart += 256;
+        }
+        chunk.changed = true;
     }
 
     // '#rrggbb' oder 'rgba(r,g,b,a)' -> packed Uint32 (Endianness berücksichtigt)
