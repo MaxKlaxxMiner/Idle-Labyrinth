@@ -1,12 +1,22 @@
 import './styles.css';
 
 import {Game} from './game/Game';
+import {LabyCache} from '@/lib/LabyCache';
 
-function bootstrap() {
+async function bootstrap() {
     const canvas = document.getElementById('game') as HTMLCanvasElement | null;
     const status = document.getElementById('status');
     if (!canvas) throw new Error('Canvas #game nicht gefunden');
     if (status) status.textContent = 'bereit';
+
+    // IndexedDB-Cache initialisieren, damit LabyCache.readLaby() synchron verwendbar ist
+    try {
+        if (status) status.textContent = 'lade Cache…';
+        await LabyCache.init();
+        if (status) status.textContent = 'bereit';
+    } catch {
+        if (status) status.textContent = 'bereit';
+    }
 
     const game = new Game(canvas);
     game.start();
@@ -17,7 +27,7 @@ function bootstrap() {
 }
 
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bootstrap);
+    document.addEventListener('DOMContentLoaded', () => { void bootstrap(); });
 } else {
-    bootstrap();
+    void bootstrap();
 }

@@ -67,10 +67,15 @@ export class Game {
 
         const saved = this.loadLevel();
         this.level = Number.isFinite(saved) && saved! >= 0 ? saved! : 0;
+
+        // Zuerst Viewgröße initialisieren, damit Autofit korrekte Maße erhält
+        this.onResize();
+
         // Initial: Level setzen, aber historyRaw erst nach optionalem Replay speichern
         this.initLevel(false);
         this.loadHistoryRawAndReplay();
 
+        // Event-Handler binden und registrieren
         this.onResize = this.onResize.bind(this);
         this.onMouseDown = this.onMouseDown.bind(this);
         this.onMouseMove = this.onMouseMove.bind(this);
@@ -80,7 +85,6 @@ export class Game {
         this.bgCanvas.addEventListener('mousedown', this.onMouseDown);
         window.addEventListener('mousemove', this.onMouseMove);
         window.addEventListener('mouseup', this.onMouseUp);
-        this.onResize();
     }
 
     start() {

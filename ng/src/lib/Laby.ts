@@ -1,4 +1,5 @@
 import {RandomMersenne} from "./Random";
+import {LabyCache} from "@/lib/LabyCache";
 
 export class Laby {
     readonly width: number;
@@ -19,6 +20,14 @@ export class Laby {
         this.pixWidth = width * 2 - 1;
         this.pixHeight = height * 2 - 1;
         console.log(`Laby: start ${this.pixWidth} x ${this.pixHeight} pixels`);
+        const labyCache = LabyCache.readLaby(this.width * this.height ^ seed);
+        if (labyCache) {
+            this.getHWall = (pos: number): boolean => (labyCache[pos >> 4] & (1 << ((pos << 1) & 31))) != 0;
+            this.getVWall = (pos: number): boolean => (labyCache[pos >> 4] & (1 << (((pos << 1) | 1) & 31))) != 0;
+            console.log(`Laby: ready. (cached)`);
+            return
+        }
+
         const fields = new Uint32Array(width * height);
 
         function setId(pos: number, id: number): number {
@@ -181,8 +190,16 @@ export class Laby {
                 }
             }
         }
-        this.getHWall = getHWall;
-        this.getVWall = getVWall;
+
+        console.log(`Laby: convert & save...`);
+        const tmp = new Uint32Array((width * height * 2 + 31) >> 5);
+        this.getHWall = (pos: number): boolean => (tmp[pos >> 4] & (1 << ((pos << 1) & 31))) != 0;
+        this.getVWall = (pos: number): boolean => (tmp[pos >> 4] & (1 << (((pos << 1) | 1) & 31))) != 0;
+        for (let pos = 0; pos < fields.length; pos++) {
+            if (getHWall(pos)) tmp[pos >> 4] |= 1 << ((pos << 1) & 31);
+            if (getVWall(pos)) tmp[pos >> 4] |= 1 << (((pos << 1) | 1) & 31);
+        }
+        LabyCache.saveLaby(this.width * this.height ^ seed, tmp);
         console.log(`Laby: ready.`);
     }
 

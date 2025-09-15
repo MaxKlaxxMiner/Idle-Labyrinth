@@ -1,44 +1,42 @@
-# Rendering TODOs
+# Rendering Leitfaden
 
-## Chunked Pixel Map (Background)
-- Goal: Render maze background via chunked pixel maps for large levels.
-- Chunks: 256x256 tiles per chunk (configurable in `Consts`).
-- Storage: One OffscreenCanvas per chunk, 1px = 1 tile (unscaled).
-- Build:
-  - Initial: paint all needed chunks tile-by-tile to `ImageData` (nearest-neighbor look).
-  - Cache: keep created chunks in an LRU map; evict far-away chunks on memory pressure.
-- View/Blit:
-  - Compute visible chunk range from camera (ox, oy, tile size).
-  - For each visible chunk: `drawImage` with scaling to screen tile size (no smoothing).
-  - Order: simple row-major; later: z-order not needed.
-- Updates:
-  - Tile changes: compute chunk id, patch `ImageData` at local (tx,ty), then `putImageData` with a small dirty rect.
-  - Level reset/zoom change: only affects blit (re-use chunks); invalidate all on dimension/tileset change.
-- Overlays:
-  - Option A: keep trail/backtrack in background (separate transparent Offscreen layer per chunk).
-  - Option B: keep overlays in foreground for simpler invalidation (current approach).
-- Performance:
-  - Disable smoothing on contexts; rely on nearest-neighbor scaling.
-  - Batch `putImageData` by merging adjacent dirty rects when frequent.
-  - Avoid per-frame allocations; reuse buffers.
-- Testing/Debug:
-  - Toggle to show chunk grid and ids.
-  - Benchmark scenarios: big levels; rapid panning; frequent small updates.
+Ziel: stabile, schnelle Darstellung sehr großer Level bei klarer Trennung von Hintergrund, Overlays und Kamera.
 
-## 1px Gaps Between Tiles
-- Keep visual gaps for readability but render them efficiently.
-- Options:
-  - Lines: draw horizontal and vertical grid lines (1px) over the filled tiles.
-  - Rect trick: draw solid tiles as full size, then overlay a background-colored rect expanded by 1px margins to create consistent gaps.
-  - Prebake: incorporate gap pixels directly in chunked `ImageData` when generating the pixel map.
-- Notes:
-  - Ensure consistent alignment at all zoom levels; clamp offsets to integers.
-  - Verify performance: prefer prebaked gaps in chunk maps for static cost.
+## Architekturüberblick
+- Hintergrund als 1px-basierte Kachelkarte in 256x256 Chunks (`PixBuffer256`).
+- Jeder Chunk hält ein `ImageData` und einen internen Canvas, 1px entspricht 1 Zelle.
+- Anzeige per skaliertem `drawImage` auf den Hintergrund-Canvas. Smoothing ist deaktiviert.
+- Overlays (Spieler, Ziel, Marker) liegen im Vordergrund-Canvas.
+- Kamera liefert Offsets und aktuelle Kachelgröße. Gaps werden optional als 1px-Linien gezeichnet.
 
-## Near-term Steps
-1. Add `Consts.chunks = { tile: 1, size: 256 }` and feature flag.
-2. Implement chunk id math and view range computation.
-3. Prototype chunk build + blit without updates.
-4. Add overlay strategy (keep current FG for player/goal/HUD).
-5. Add optional prebaked 1px gaps in chunk generation.
+## Ist-Stand
+- Chunks: Erstellung lazy beim ersten Bedarf, feste Größe 256x256.
+- Farbwerte vorab in gepackten Uint32 abgelegt, direkte Pixelmanipulation über `PixBuffer256.u32`.
+- Sichtbereich berechnet über Kamera-Offsets und Kachelgröße, nur sichtbare Chunks werden gezeichnet.
+- Gaps: 1px-Linien werden über den Hintergrund gelegt, wenn die Kachelgröße einen Schwellwert erreicht.
 
+## Offene Punkte
+- Chunk-Lifecycle: Strategie zur Begrenzung von Speicherbedarf, einfache LRU oder Obergrenze je nach Gerätekategorie.
+- Dirty-Region-Optimierung: kleine Bereiche zusammenfassen, um `putImageData`-Aufrufe zu reduzieren.
+- Optional OffscreenCanvas: Evaluierung, ob `OffscreenCanvas` messbare Vorteile bringt.
+- Debug-Ansichten: Umschalten für Chunk-Gitter, Chunk-IDs und Sichtfenster.
+- Metriken: einfache Statistik über renderbare Chunks, `put`-Aufrufe, `drawImage`-Aufrufe pro Frame.
+- Gaps-Variante evaluieren: Vorbacken der Gaps in den Chunk-Bitmapdaten als Alternative zum Überzeichnen.
+- Integer-Ausrichtung: Offsets konsequent runden, um Subpixel und Artefakte zu vermeiden.
+
+## Performance-Hinweise
+- Kontexte mit `imageSmoothingEnabled = false` verwenden.
+- Per-Frame-Allokationen vermeiden, Puffer wiederverwenden.
+- Nur sichtbare Bereiche rendern, Clipping strikt halten.
+
+## Testfälle
+- Große Level mit schnellen Kamerabewegungen und Zoomwechseln.
+- Häufige Pfadupdates entlang langer Routen.
+- Unterschiedliche Gerätepixelraten und Fenstergrößen.
+
+## Aufgabenliste
+1. Speicherstrategie für Chunks implementieren und messen.
+2. Debug-Overlay für Chunks und Sichtfenster hinzufügen.
+3. Metrik-Logging für Renderkosten einbauen.
+4. Optionale Dirty-Region-Zusammenfassung prototypisch testen.
+5. Alternative Gaps-Strategie vorbacken und vergleichen.
