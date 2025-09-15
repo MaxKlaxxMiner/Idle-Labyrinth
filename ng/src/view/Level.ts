@@ -1,16 +1,14 @@
 import {Consts} from '@/game/Consts';
 import {Laby} from '@/lib/Laby';
+import {PixBuffer} from '@/view/PixBuffer';
 
 export class Level {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
 
     private laby!: Laby;
-    // Pixel-basierte Hintergrund-Bitmap (1px = 1 Zelle)
-    private pixCanvas: HTMLCanvasElement | null = null;
-    private pixCtx: CanvasRenderingContext2D | null = null;
-    private imgData: ImageData | null = null;
-    private u32: Uint32Array | null = null;
+    // Pixel-basierter Hintergrund-Puffer (1px = 1 Zelle)
+    private pix: PixBuffer | null = null;
     private pixW = 0;
     private pixH = 0;
     // Farbcache (gepackte Uint32-Werte)
@@ -33,16 +31,7 @@ export class Level {
         // Bitmap gemäß Laby-Pixelmaßen (pixWidth x pixHeight) anlegen/erneuern
         this.pixW = this.laby.pixWidth;
         this.pixH = this.laby.pixHeight;
-        const c = document.createElement('canvas');
-        c.width = this.pixW;
-        c.height = this.pixH;
-        const pctx = c.getContext('2d');
-        if (!pctx) throw new Error('Canvas 2D Context (pix) nicht verfügbar');
-        pctx.imageSmoothingEnabled = false;
-        this.pixCanvas = c;
-        this.pixCtx = pctx;
-        this.imgData = pctx.createImageData(this.pixW, this.pixH);
-        this.u32 = new Uint32Array(this.imgData.data.buffer, 0, this.pixW * this.pixH);
+        this.pix = new PixBuffer(this.pixW, this.pixH);
         // Debug-Ausgabe: Pixelabmessungen des Labyrinths
         console.log(`Level: Bitmap-Größe ${this.pixW} x ${this.pixH} Pixel`);
         // Farben einmalig packen
@@ -66,17 +55,17 @@ export class Level {
     }
 
     markCell(x: number, y: number, history: boolean) {
-        if (!this.u32) return;
+        if (!this.pix) return;
         const p = this.cellKey(x, y);
         if (p < 0) return;
-        this.u32[p] = history ? this.trail32 : this.back32;
+        this.pix.u32[p] = history ? this.trail32 : this.back32;
     }
 
     clearCell(x: number, y: number) {
-        if (!this.u32) return;
+        if (!this.pix) return;
         const p = this.cellKey(x, y);
         if (p < 0) return;
-        this.u32[p] = this.laby.isFree(x, y) ? this.bg32 : this.wall32;
+        this.pix.u32[p] = this.laby.isFree(x, y) ? this.bg32 : this.wall32;
     }
 
     private cellKey(x: number, y: number): number {
@@ -91,11 +80,11 @@ export class Level {
         const h = this.canvas.height;
         this.ctx.clearRect(0, 0, w, h);
 
-        if (!this.pixCtx || !this.imgData) return;
+        if (!this.pix) return;
         // Auf Pixel-Canvas schreiben und skaliert blitten
-        this.pixCtx.putImageData(this.imgData, 0, 0);
+        this.pix.put();
         this.ctx.imageSmoothingEnabled = false;
-        this.ctx.drawImage(this.pixCanvas!, 0, 0, this.pixW, this.pixH, ox, oy, this.pixW * tileSize, this.pixH * tileSize);
+        this.pix.drawTo(this.ctx, 0, 0, this.pixW, this.pixH, ox, oy, this.pixW * tileSize, this.pixH * tileSize);
 
         // Gaps (1px) zwischen den Zellen/NODES optional überlagern
         if (tileSize >= Consts.sizes.gapThreshold) {
@@ -123,12 +112,12 @@ export class Level {
 
     // Grundbild (Labyrinth ohne Overlays) in das U32-Abbild schreiben
     private drawBase() {
-        if (!this.u32) return;
+        if (!this.pix) return;
         let idx = 0;
         for (let y = 0; y < this.pixH; y++) {
             for (let x = 0; x < this.pixW; x++) {
                 const free = this.laby.isFree(x, y);
-                this.u32[idx++] = free ? this.bg32 : this.wall32;
+                this.pix.u32[idx++] = free ? this.bg32 : this.wall32;
             }
         }
     }
