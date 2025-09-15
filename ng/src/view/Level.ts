@@ -1,14 +1,16 @@
 import {Consts} from '@/game/Consts';
 import {Laby} from '@/lib/Laby';
-import {PixBuffer} from '@/view/PixBuffer';
+import {PixBuffer256} from '@/view/PixBuffer256';
 
 export class Level {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
 
     private laby!: Laby;
-    // Pixel-basierter Hintergrund-Puffer (1px = 1 Zelle)
-    private pix: PixBuffer | null = null;
+    // Chunked Pixel-Puffer (1px = 1 Zelle), feste Größe 256x256
+    private chunks: PixBuffer256[] = [];
+    private chunksX = 0;
+    private chunksY = 0;
     private pixW = 0;
     private pixH = 0;
     // Farbcache (gepackte Uint32-Werte)
@@ -28,12 +30,23 @@ export class Level {
 
     setLaby(laby: Laby) {
         this.laby = laby;
-        // Bitmap gemäß Laby-Pixelmaßen (pixWidth x pixHeight) anlegen/erneuern
         this.pixW = this.laby.pixWidth;
         this.pixH = this.laby.pixHeight;
-        this.pix = new PixBuffer(this.pixW, this.pixH);
-        // Debug-Ausgabe: Pixelabmessungen des Labyrinths
-        console.log(`Level: Bitmap-Größe ${this.pixW} x ${this.pixH} Pixel`);
+        // Chunk-Raster aufbauen (immer 256x256 pro Chunk)
+        // Ceil-Division via (n + 255) >> 8
+        this.chunksX = Math.max(1, (this.pixW + 255) >> 8);
+        this.chunksY = Math.max(1, (this.pixH + 255) >> 8);
+        this.chunks = [];
+        for (let cy = 0; cy < this.chunksY; cy++) {
+            for (let cx = 0; cx < this.chunksX; cx++) {
+                const ofsX = cx << 8; // cx * 256
+                const ofsY = cy << 8; // cy * 256
+                // Feste Chunkgröße 256x256, auch am Rand
+                this.chunks.push(new PixBuffer256(ofsX, ofsY));
+            }
+        }
+        // Debug-Ausgabe: Pixelabmessungen und Chunkanzahl
+        console.log(`Level: Bitmap-Größe ${this.pixW} x ${this.pixH} Pixel, Chunks ${this.chunksX} x ${this.chunksY}`);
         // Farben einmalig packen
         this.bg32 = this.parseColor(Consts.colors.background);
         this.wall32 = this.parseColor(Consts.colors.wall);
@@ -55,8 +68,13 @@ export class Level {
     }
 
     private setPixel(x: number, y: number, color: number) {
-        if (!this.pix) return;
-        this.pix.setPixel(x, y, color);
+        if (x < 0 || y < 0 || x >= this.pixW || y >= this.pixH) return;
+        const cx = x >> 8; // x / 256
+        const cy = y >> 8; // y / 256
+        const idx = cy * this.chunksX + cx;
+        const chunk = this.chunks[idx];
+        if (!chunk) return;
+        chunk.setPixel(x, y, color);
     }
 
     markCell(x: number, y: number, history: boolean) {
@@ -69,11 +87,24 @@ export class Level {
         const h = this.canvas.height;
         this.ctx.clearRect(0, 0, w, h);
 
-        if (!this.pix) return;
-        // Auf Pixel-Canvas schreiben und skaliert blitten
-        this.pix.put();
+        // Alle Chunks aktualisieren und blitten
         this.ctx.imageSmoothingEnabled = false;
-        this.pix.drawTo(this.ctx, 0, 0, this.pixW, this.pixH, ox, oy, this.pixW * tileSize, this.pixH * tileSize);
+        for (let cy = 0; cy < this.chunksY; cy++) {
+            for (let cx = 0; cx < this.chunksX; cx++) {
+                const chunk = this.chunks[cy * this.chunksX + cx];
+                // Effektive Breite/Höhe innerhalb des Labyrinths beschränken
+                const sx = 0, sy = 0;
+                const sw = Math.max(0, Math.min(256, this.pixW - chunk.ofsX));
+                const sh = Math.max(0, Math.min(256, this.pixH - chunk.ofsY));
+                if (sw <= 0 || sh <= 0) continue;
+                chunk.put();
+                const dx = ox + chunk.ofsX * tileSize;
+                const dy = oy + chunk.ofsY * tileSize;
+                const dw = sw * tileSize;
+                const dh = sh * tileSize;
+                chunk.drawTo(this.ctx, sx, sy, sw, sh, dx, dy, dw, dh);
+            }
+        }
 
         // Gaps (1px) zwischen den Zellen/NODES optional überlagern
         if (tileSize >= Consts.sizes.gapThreshold) {
@@ -101,7 +132,6 @@ export class Level {
 
     // Grundbild (Labyrinth ohne Overlays) in das U32-Abbild schreiben
     private drawBase() {
-        if (!this.pix) return;
         for (let y = 0; y < this.pixH; y++) {
             for (let x = 0; x < this.pixW; x++) {
                 const free = this.laby.isFree(x, y)
