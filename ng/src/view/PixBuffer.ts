@@ -45,5 +45,10 @@ export class PixBuffer {
         if (x < 0 || y < 0 || x >= this.width || y >= this.height) return -1;
         return y * this.width + x;
     }
-}
 
+    setPixel(x: number, y: number, color: number): void {
+        const index = this.index(x, y);
+        if (index < 0) return;
+        this.u32[index] = color;
+    }
+}

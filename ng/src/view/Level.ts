@@ -54,24 +54,13 @@ export class Level {
         this.markCell(1, 1, true); // Startfeld pauschal markieren
     }
 
+    private setPixel(x: number, y: number, color: number) {
+        if (!this.pix) return;
+        this.pix.setPixel(x, y, color);
+    }
+
     markCell(x: number, y: number, history: boolean) {
-        if (!this.pix) return;
-        const p = this.cellKey(x, y);
-        if (p < 0) return;
-        this.pix.u32[p] = history ? this.trail32 : this.back32;
-    }
-
-    clearCell(x: number, y: number) {
-        if (!this.pix) return;
-        const p = this.cellKey(x, y);
-        if (p < 0) return;
-        this.pix.u32[p] = this.laby.isFree(x, y) ? this.bg32 : this.wall32;
-    }
-
-    private cellKey(x: number, y: number): number {
-        if (this.pixW <= 0 || this.pixH <= 0) return -1;
-        if (x < 0 || y < 0 || x >= this.pixW || y >= this.pixH) return -1;
-        return y * this.pixW + x;
+        this.setPixel(x, y, history ? this.trail32 : this.back32)
     }
 
     // Draw labyrinth + overlays in 1px-Bitmap und anschließend skaliert blitten
@@ -113,11 +102,10 @@ export class Level {
     // Grundbild (Labyrinth ohne Overlays) in das U32-Abbild schreiben
     private drawBase() {
         if (!this.pix) return;
-        let idx = 0;
         for (let y = 0; y < this.pixH; y++) {
             for (let x = 0; x < this.pixW; x++) {
-                const free = this.laby.isFree(x, y);
-                this.pix.u32[idx++] = free ? this.bg32 : this.wall32;
+                const free = this.laby.isFree(x, y)
+                this.setPixel(x, y, free ? this.bg32 : this.wall32)
             }
         }
     }
