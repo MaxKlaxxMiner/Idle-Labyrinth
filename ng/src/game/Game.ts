@@ -290,8 +290,9 @@ export class Game {
         this.ctx.imageSmoothingEnabled = false;
         this.camera.setViewSize(w, h);
         if (this.laby) {
-            this.camera.setBestFitZoom();
-            this.camera.centerOnPlayerTile(this.player.x, this.player.y);
+            // Kamera an neue Viewgröße begrenzen
+            const c = this.camera.getCenter();
+            this.camera.setCenter(c.camX, c.camY);
         }
         this.needsRender = true;
     }
