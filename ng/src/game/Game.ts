@@ -363,7 +363,6 @@ export class Game {
         this.goal.y = Math.max(1, this.laby.pixHeight - 2);
         this.markers.clear();
         this.levelView.setLaby(this.laby);
-        this.levelView.clearHighlights();
 
         // Camera: Weltmaße setzen, Best-Fit und zentrieren
         this.camera.setWorldSize(this.laby.pixWidth, this.laby.pixHeight);

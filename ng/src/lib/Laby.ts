@@ -18,6 +18,7 @@ export class Laby {
         this.height = height;
         this.pixWidth = width * 2 - 1;
         this.pixHeight = height * 2 - 1;
+        console.log(`Laby: start ${this.pixWidth} x ${this.pixHeight} pixels`);
         const fields = new Uint32Array(width * height);
 
         function setId(pos: number, id: number): number {
@@ -111,6 +112,8 @@ export class Laby {
         const fullSize = (width - 1) * (height - 1);
         const remainLimit = calcRemainLimit(limit, fullSize);
 
+        const totalEstimate = (width - 1.5) * (height - 1.5) | 0;
+
         let totalFounds = 0;
         for (; ;) {
             let founds = 0;
@@ -138,6 +141,7 @@ export class Laby {
                 }
             }
             totalFounds += founds;
+            console.log(`Laby: generate ${totalFounds} / ${totalEstimate} (${((totalFounds / totalEstimate) * 100).toFixed(2)} %)`);
             if (founds < remainLimit) break;
         }
 
@@ -153,6 +157,7 @@ export class Laby {
                     }
                 }
             }
+            console.log(`Laby: remain ${remain.length}`);
             for (let i = 0; i < remain.length; i++) {
                 const j = rnd.nextInt() % (i + 1);
                 const tmp = remain[i];
@@ -178,6 +183,7 @@ export class Laby {
         }
         this.getHWall = getHWall;
         this.getVWall = getVWall;
+        console.log(`Laby: ready.`);
     }
 
     // Grid-Helper: true, wenn Tile (x,y) begehbar ist

@@ -8,7 +8,7 @@ export class Level {
 
     private laby!: Laby;
     // Chunked Pixel-Puffer (1px = 1 Zelle), feste Größe 256x256
-    private chunks: PixBuffer256[] = [];
+    private chunks: (PixBuffer256 | null)[] = [];
     private chunksX = 0;
     private chunksY = 0;
     private pixW = 0;
@@ -36,15 +36,8 @@ export class Level {
         // Ceil-Division via (n + 255) >> 8
         this.chunksX = Math.max(1, (this.pixW + 255) >> 8);
         this.chunksY = Math.max(1, (this.pixH + 255) >> 8);
-        this.chunks = [];
-        for (let cy = 0; cy < this.chunksY; cy++) {
-            for (let cx = 0; cx < this.chunksX; cx++) {
-                const ofsX = cx << 8; // cx * 256
-                const ofsY = cy << 8; // cy * 256
-                // Feste Chunkgröße 256x256, auch am Rand
-                this.chunks.push(new PixBuffer256(ofsX, ofsY));
-            }
-        }
+        // Lazy-Build: Platz reservieren, aber nicht erstellen
+        this.chunks = new Array(this.chunksX * this.chunksY).fill(null);
         // Debug-Ausgabe: Pixelabmessungen und Chunkanzahl
         console.log(`Level: Bitmap-Größe ${this.pixW} x ${this.pixH} Pixel, Chunks ${this.chunksX} x ${this.chunksY}`);
         // Farben einmalig packen
@@ -63,7 +56,7 @@ export class Level {
 
     // Tile/Path API (direkter Pixeleingriff)
     clearHighlights() {
-        this.drawBase();
+        this.chunks = new Array(this.chunksX * this.chunksY).fill(null);
         this.markCell(1, 1, true); // Startfeld pauschal markieren
     }
 
@@ -72,8 +65,10 @@ export class Level {
         const cx = x >> 8; // x / 256
         const cy = y >> 8; // y / 256
         const idx = cy * this.chunksX + cx;
-        const chunk = this.chunks[idx];
-        if (!chunk) return;
+        let chunk = this.chunks[idx];
+        if (!chunk) {
+            chunk = this.createChunk(cx, cy);
+        }
         chunk.setPixel(x, y, color);
     }
 
@@ -107,8 +102,10 @@ export class Level {
         this.ctx.imageSmoothingEnabled = false;
         for (let cy = c0y; cy <= c1y; cy++) {
             for (let cx = c0x; cx <= c1x; cx++) {
-                const chunk = this.chunks[cy * this.chunksX + cx];
-                if (!chunk) continue;
+                let chunk = this.chunks[cy * this.chunksX + cx];
+                if (!chunk) {
+                    chunk = this.createChunk(cx, cy);
+                }
                 // Sichtbaren Quellbereich innerhalb des Chunks bestimmen
                 const sx = Math.max(0, visX0 - chunk.ofsX);
                 const sy = Math.max(0, visY0 - chunk.ofsY);
@@ -150,21 +147,16 @@ export class Level {
         }
     }
 
-    // Grundbild (Labyrinth ohne Overlays) in das U32-Abbild schreiben
-    private drawBase() {
-        for (let i = 0; i < this.chunks.length; i++) {
-            this.drawBaseChunk(this.chunks[i]);
-        }
-    }
-
-    // Malt das Grundbild für einen einzelnen 256x256-Chunk
-    private drawBaseChunk(chunk: PixBuffer256) {
-        // Sichtbare Grenzen innerhalb des Labyrinths (Clipping am Rand)
-        const x0 = chunk.ofsX;
-        const y0 = chunk.ofsY;
+    // Erzeugt einen Chunk an Position (cx, cy), zeichnet das Grundbild hinein und merkt ihn
+    private createChunk(cx: number, cy: number): PixBuffer256 {
+        const ofsX = cx << 8;
+        const ofsY = cy << 8;
+        const chunk = new PixBuffer256(ofsX, ofsY);
+        // Grundbild füllen (Clipping am Levelrand)
+        const x0 = ofsX;
+        const y0 = ofsY;
         const x1 = Math.min(this.pixW, x0 + 256);
         const y1 = Math.min(this.pixH, y0 + 256);
-        if (x0 >= x1 || y0 >= y1) return;
         const u32 = chunk.u32;
         let idxRowStart = 0;
         for (let y = y0; y < y1; y++) {
@@ -176,6 +168,8 @@ export class Level {
             idxRowStart += 256;
         }
         chunk.changed = true;
+        this.chunks[cy * this.chunksX + cx] = chunk;
+        return chunk;
     }
 
     // '#rrggbb' oder 'rgba(r,g,b,a)' -> packed Uint32 (Endianness berücksichtigt)
