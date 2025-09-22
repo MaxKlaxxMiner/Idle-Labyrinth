@@ -386,6 +386,44 @@ export class Game {
         return this.laby.isFree(mx, my);
     }
 
+    private applyBacktrackHighlight(x: number, y: number, dx: number, dy: number, mode: 'backtrack' | 'deadend') {
+        this.levelView.markCell(x, y, mode);
+        if (dx !== 0 || dy !== 0) {
+            this.levelView.markCell(x + dx, y + dy, mode);
+        }
+    }
+
+    private getBacktrackHighlightMode(x: number, y: number): 'backtrack' | 'deadend' {
+        return this.isDeadEndCell(x, y) ? 'deadend' : 'backtrack';
+    }
+
+    // Prüft, ob eine Zelle nur einen offenen Weg besitzt (rosa zählt als geschlossen).
+    private isDeadEndCell(x: number, y: number): boolean {
+        if ((x & 1) === 0 || (y & 1) === 0) return false;
+        let open = 0;
+        const dirs: ReadonlyArray<[number, number]> = [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+        ];
+        for (const [dx, dy] of dirs) {
+            const midX = x + dx;
+            const midY = y + dy;
+            if (!this.laby.isFree(midX, midY)) continue;
+            const targetX = x + dx * 2;
+            const targetY = y + dy * 2;
+            if (!this.laby.isFree(targetX, targetY)) continue;
+            const midColor = this.levelView.getPixel(midX, midY);
+            if (midColor === this.levelView.deadendColor32) continue;
+            const targetColor = this.levelView.getPixel(targetX, targetY);
+            if (targetColor === this.levelView.deadendColor32) continue;
+            open++;
+            if (open > 1) return false;
+        }
+        return open <= 1;
+    }
+
     private initLevel(saveImmediate: boolean = true) {
         this.laby = this.createLabyForLevel(this.level);
 
@@ -431,8 +469,10 @@ export class Game {
             const nx = this.player.x + dx * 2;
             const ny = this.player.y + dy * 2;
             if (!this.canStepTo(this.player.x, this.player.y, nx, ny)) return;
-            this.levelView.markCell(nx - dx * 2, ny - dy * 2, false);
-            this.levelView.markCell(nx - dx, ny - dy, false);
+            const prevX = this.player.x;
+            const prevY = this.player.y;
+            const highlightMode = this.getBacktrackHighlightMode(prevX, prevY);
+            this.applyBacktrackHighlight(prevX, prevY, dx, dy, highlightMode);
             this.player.x = nx;
             this.player.y = ny;
             this.moves = Math.max(0, this.moves - 1);
@@ -471,13 +511,13 @@ export class Game {
         const cy = dy;
 
         if (isUndo) {
-            this.levelView.markCell(nx - cx, ny - cy, false);
-            this.levelView.markCell(prevX, prevY, false);
+            const highlightMode = this.getBacktrackHighlightMode(prevX, prevY);
+            this.applyBacktrackHighlight(prevX, prevY, cx, cy, highlightMode);
             this.history = this.history.slice(0, -1);
             this.moves = Math.max(0, this.moves - 1);
         } else {
-            this.levelView.markCell(nx - cx, ny - cy, true);
-            this.levelView.markCell(nx, ny, true);
+            this.levelView.markCell(nx - cx, ny - cy, 'trail');
+            this.levelView.markCell(nx, ny, 'trail');
             this.history += inputKey;
             this.moves += 1;
         }

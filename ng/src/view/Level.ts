@@ -18,6 +18,7 @@ export class Level {
     wallColor32 = 0;
     trailColor32 = 0;
     backtrackColor32 = 0;
+    deadendColor32 = 0;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -45,6 +46,7 @@ export class Level {
         this.wallColor32 = this.parseColor(Consts.colors.wall);
         this.trailColor32 = this.parseColor(Consts.colors.trail);
         this.backtrackColor32 = this.parseColor(Consts.colors.backtrack);
+        this.deadendColor32 = this.parseColor(Consts.colors.deadend);
         this.clearHighlights();
     }
 
@@ -57,7 +59,7 @@ export class Level {
     // Tile/Path API (direkter Pixeleingriff)
     clearHighlights() {
         this.chunks = new Array(this.chunksX * this.chunksY).fill(null);
-        this.markCell(1, 1, true); // Startfeld pauschal markieren
+        this.markCell(1, 1, 'trail'); // Startfeld pauschal markieren
     }
 
     setPixel(x: number, y: number, color: number) {
@@ -79,8 +81,11 @@ export class Level {
         return chunk.getPixel(x, y);
     }
 
-    markCell(x: number, y: number, history: boolean) {
-        this.setPixel(x, y, history ? this.trailColor32 : this.backtrackColor32)
+    markCell(x: number, y: number, mode: 'trail' | 'backtrack' | 'deadend') {
+        let color = this.backtrackColor32;
+        if (mode === 'trail') color = this.trailColor32;
+        else if (mode === 'deadend') color = this.deadendColor32;
+        this.setPixel(x, y, color);
     }
 
     // Draw labyrinth + overlays in 1px-Bitmap und anschließend skaliert blitten
