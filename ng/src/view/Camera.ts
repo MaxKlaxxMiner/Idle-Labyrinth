@@ -33,16 +33,29 @@ export class Camera {
         this.tileSize = Consts.zoom.steps[clamped] ?? this.tileSize;
     }
 
-    zoomIn(): boolean {
-        const prev = this.tileSizeIndex;
-        this.setTileSizeIndex(prev + 1);
-        return this.tileSizeIndex !== prev;
-    }
+    zoom(delta: number, focusTileX: number, focusTileY: number): boolean {
+        if (delta === 0) return false;
+        const prevIndex = this.tileSizeIndex;
+        const prevTileSize = this.tileSize;
+        const prevOffsets = this.getOffsets();
+        // Fokuspunkt so merken, dass seine Bildschirmposition nach dem Zoom erhalten bleibt
+        const focusPxOld = (focusTileX + 0.5) * prevTileSize;
+        const focusPyOld = (focusTileY + 0.5) * prevTileSize;
+        const focusScreenX = prevOffsets.ox + focusPxOld;
+        const focusScreenY = prevOffsets.oy + focusPyOld;
 
-    zoomOut(): boolean {
-        const prev = this.tileSizeIndex;
-        this.setTileSizeIndex(prev - 1);
-        return this.tileSizeIndex !== prev;
+        this.setTileSizeIndex(prevIndex + delta);
+        if (this.tileSizeIndex === prevIndex) return false;
+
+        const newTileSize = this.tileSize;
+        const focusPxNew = (focusTileX + 0.5) * newTileSize;
+        const focusPyNew = (focusTileY + 0.5) * newTileSize;
+
+        const desiredCamX = this.viewW / 2 + focusPxNew - focusScreenX;
+        const desiredCamY = this.viewH / 2 + focusPyNew - focusScreenY;
+
+        this.setCenter(desiredCamX, desiredCamY);
+        return true;
     }
 
     private getWorldPixelSize(): { worldW: number; worldH: number } {

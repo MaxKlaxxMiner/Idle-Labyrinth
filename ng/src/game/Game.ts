@@ -157,9 +157,9 @@ export class Game {
             this.followPaused = false;
             zoomChanged = true;
         } else if (this.input.consumeKey('+', '=')) {
-            zoomChanged = this.camera.zoomIn();
+            zoomChanged = this.camera.zoom(1, this.player.x, this.player.y);
         } else if (this.input.consumeKey('-')) {
-            zoomChanged = this.camera.zoomOut();
+            zoomChanged = this.camera.zoom(-1, this.player.x, this.player.y);
         }
         if (zoomChanged) this.needsRender = true;
 
