@@ -54,7 +54,7 @@ module.exports = (env, argv) => {
         devServer: {
             static: {directory: path.resolve(__dirname, 'public')},
             hot: true,
-            open: false,
+            open: true,
             host: '0.0.0.0',
             port: 5173,
             allowedHosts: 'all',

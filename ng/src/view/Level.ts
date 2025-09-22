@@ -14,10 +14,10 @@ export class Level {
     private pixW = 0;
     private pixH = 0;
     // Farbcache (gepackte Uint32-Werte)
-    private bg32 = 0;
-    private wall32 = 0;
-    private trail32 = 0;
-    private back32 = 0;
+    bgColor32 = 0;
+    wallColor32 = 0;
+    trailColor32 = 0;
+    backtrackColor32 = 0;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -41,10 +41,10 @@ export class Level {
         // Debug-Ausgabe: Pixelabmessungen und Chunkanzahl
         console.log(`Level: Bitmap-Größe ${this.pixW} x ${this.pixH} Pixel, Chunks ${this.chunksX} x ${this.chunksY}`);
         // Farben einmalig packen
-        this.bg32 = this.parseColor(Consts.colors.background);
-        this.wall32 = this.parseColor(Consts.colors.wall);
-        this.trail32 = this.parseColor(Consts.colors.trail);
-        this.back32 = this.parseColor(Consts.colors.backtrack);
+        this.bgColor32 = this.parseColor(Consts.colors.background);
+        this.wallColor32 = this.parseColor(Consts.colors.wall);
+        this.trailColor32 = this.parseColor(Consts.colors.trail);
+        this.backtrackColor32 = this.parseColor(Consts.colors.backtrack);
         this.clearHighlights();
     }
 
@@ -60,20 +60,27 @@ export class Level {
         this.markCell(1, 1, true); // Startfeld pauschal markieren
     }
 
-    private setPixel(x: number, y: number, color: number) {
+    setPixel(x: number, y: number, color: number) {
         if (x < 0 || y < 0 || x >= this.pixW || y >= this.pixH) return;
-        const cx = x >> 8; // x / 256
-        const cy = y >> 8; // y / 256
+        const cx = x >> 8;
+        const cy = y >> 8;
         const idx = cy * this.chunksX + cx;
-        let chunk = this.chunks[idx];
-        if (!chunk) {
-            chunk = this.createChunk(cx, cy);
-        }
+        const chunk = this.chunks[idx] ?? this.createChunk(cx, cy);
         chunk.setPixel(x, y, color);
     }
 
+    getPixel(x: number, y: number): number {
+        if (!this.laby) return 0;
+        if (x < 0 || y < 0 || x >= this.pixW || y >= this.pixH) return 0;
+        const cx = x >> 8;
+        const cy = y >> 8;
+        const idx = cy * this.chunksX + cx;
+        const chunk = this.chunks[idx] ?? this.createChunk(cx, cy);
+        return chunk.getPixel(x, y);
+    }
+
     markCell(x: number, y: number, history: boolean) {
-        this.setPixel(x, y, history ? this.trail32 : this.back32)
+        this.setPixel(x, y, history ? this.trailColor32 : this.backtrackColor32)
     }
 
     // Draw labyrinth + overlays in 1px-Bitmap und anschließend skaliert blitten
@@ -163,7 +170,7 @@ export class Level {
             let idx = idxRowStart;
             for (let x = x0; x < x1; x++) {
                 const free = this.laby.isFree(x, y);
-                u32[idx++] = free ? this.bg32 : this.wall32;
+                u32[idx++] = free ? this.bgColor32 : this.wallColor32;
             }
             idxRowStart += 256;
         }

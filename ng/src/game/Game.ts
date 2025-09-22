@@ -40,12 +40,14 @@ export class Game {
     private lastSavedHistoryLen = 0;
     private markers = new Set<number>();
 
-    // Mouse-drag Panning (temporär, bis Mouseup; danach re-centern)
+    // Mouse-drag Panning (temporär, Kamera folgt erst nach Bewegung wieder)
     private dragging = false;
     private dragStartX = 0;
     private dragStartY = 0;
     private dragStartCamX = 0;
     private dragStartCamY = 0;
+    private dragMoved = false;
+    private followPaused = false;
 
     constructor(canvas: HTMLCanvasElement) {
         this.bgCanvas = canvas;
@@ -152,6 +154,7 @@ export class Game {
         if (this.input.consumeKey('0')) {
             this.camera.setBestFitZoom();
             this.camera.centerOnPlayerTile(this.player.x, this.player.y);
+            this.followPaused = false;
             zoomChanged = true;
         } else if (this.input.consumeKey('+', '=')) {
             zoomChanged = this.camera.zoomIn();
@@ -173,13 +176,14 @@ export class Game {
         }
 
         // Kamera-Follow mit Dead-Zone (bei Drag pausieren)
-        if (!this.dragging) {
+        if (!this.dragging && !this.followPaused) {
             if (this.camera.updateFollowPlayerTile(this.player.x, this.player.y)) this.needsRender = true;
         }
 
         // Sofort auf Spieler zentrieren (Enter/NumpadEnter)
         if (this.input.consumeKey('Enter', 'NumpadEnter', 'Return')) {
             this.camera.centerOnPlayerTile(this.player.x, this.player.y);
+            this.followPaused = false;
             this.needsRender = true;
         }
 
@@ -301,7 +305,7 @@ export class Game {
         this.needsRender = true;
     }
 
-    // Mouse drag handlers: temporäres Panning, danach re-center
+    // Mouse drag handlers: temporäres Panning mit pausierter Nachführung
     private onMouseDown(e: MouseEvent) {
         if (e.button !== 0) return;
         this.dragging = true;
@@ -310,6 +314,7 @@ export class Game {
         const c = this.camera.getCenter();
         this.dragStartCamX = c.camX;
         this.dragStartCamY = c.camY;
+        this.dragMoved = false;
     }
 
     private onMouseMove(e: MouseEvent) {
@@ -320,18 +325,20 @@ export class Game {
         const dx = dxCss * dpr;
         const dy = dyCss * dpr;
         const changed = this.camera.setCenter(this.dragStartCamX - dx, this.dragStartCamY - dy);
-        if (changed) this.needsRender = true;
+        if (changed) {
+            this.dragMoved = true;
+            this.needsRender = true;
+        }
     }
 
     private onMouseUp(_e: MouseEvent) {
         if (!this.dragging) return;
         this.dragging = false;
-        // Nach Loslassen: nur soweit schieben, dass Spieler wieder in Dead-Zone ist
-        const {tileSize} = this.camera.getOffsets();
-        const px = (this.player.x + 0.5) * tileSize;
-        const py = (this.player.y + 0.5) * tileSize;
-        this.camera.ensurePlayerInsideDeadZone(px, py);
-        this.needsRender = true;
+        const hadMovement = this.dragMoved;
+        this.dragMoved = false;
+        if (hadMovement) {
+            this.followPaused = true;
+        }
     }
 
     private createLabyForLevel(gameLevel: number): Laby {
@@ -373,12 +380,14 @@ export class Game {
         this.camera.setWorldSize(this.laby.pixWidth, this.laby.pixHeight);
         this.camera.setBestFitZoom();
         this.camera.centerOnPlayerTile(this.player.x, this.player.y);
+        this.followPaused = false;
         this.needsRender = true;
     }
 
     // Verarbeitet Spieler-relevante Eingaben (Rohcodes):
     // 'L','R','U','D' = Bewegungen; 'B' = Backspace/Undo; 'M' = Marker toggle
     private updatePlayer(inputKey: 'L' | 'R' | 'U' | 'D' | 'B' | 'M') {
+        this.followPaused = false;
         if (inputKey === 'M') {
             this.historyRaw += 'M';
             this.toggleMarkerAt(this.player.x, this.player.y);
@@ -514,6 +523,7 @@ export class Game {
             }
             // Nach Replay Kamera auf Spieler zentrieren, Render anstoßen
             this.camera.centerOnPlayerTile(this.player.x, this.player.y);
+            this.followPaused = false;
             this.needsRender = true;
         } catch {
         }

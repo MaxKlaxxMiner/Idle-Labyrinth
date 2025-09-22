@@ -54,4 +54,11 @@ export class PixBuffer256 {
         this.u32[index] = color;
         this.changed = true;
     }
+
+    getPixel(x: number, y: number): number {
+        x -= this.ofsX;
+        y -= this.ofsY;
+        if (x < 0 || y < 0 || x >= 256 || y >= 256) return 0;
+        return this.u32[(y << 8) + x];
+    }
 }
