@@ -82,11 +82,13 @@ export class Game {
         this.onMouseDown = this.onMouseDown.bind(this);
         this.onMouseMove = this.onMouseMove.bind(this);
         this.onMouseUp = this.onMouseUp.bind(this);
+        this.onWheel = this.onWheel.bind(this);
         window.addEventListener('resize', this.onResize);
         // Maus-Eingaben auf dem BG-Canvas abgreifen (FG hat pointer-events: none)
         this.bgCanvas.addEventListener('mousedown', this.onMouseDown);
         window.addEventListener('mousemove', this.onMouseMove);
         window.addEventListener('mouseup', this.onMouseUp);
+        this.bgCanvas.addEventListener('wheel', this.onWheel, {passive: false});
     }
 
     start() {
@@ -338,6 +340,29 @@ export class Game {
         this.dragMoved = false;
         if (hadMovement) {
             this.followPaused = true;
+        }
+    }
+
+    private onWheel(e: WheelEvent) {
+        if (e.deltaY === 0) return;
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 1 : -1;
+        const rect = this.bgCanvas.getBoundingClientRect();
+        const cssX = e.clientX - rect.left;
+        const cssY = e.clientY - rect.top;
+        const dpr = Math.min(Consts.display.dprMax, window.devicePixelRatio || 1);
+        const canvasX = cssX * dpr;
+        const canvasY = cssY * dpr;
+        const {ox, oy, tileSize} = this.camera.getOffsets();
+        if (tileSize <= 0) return;
+        const focusPx = canvasX - ox;
+        const focusPy = canvasY - oy;
+        const focusTileX = focusPx / tileSize - 0.5;
+        const focusTileY = focusPy / tileSize - 0.5;
+        const zoomChanged = this.camera.zoom(delta, focusTileX, focusTileY);
+        if (zoomChanged) {
+            this.followPaused = true;
+            this.needsRender = true;
         }
     }
 
