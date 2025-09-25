@@ -13,7 +13,6 @@ export class Game {
     private rafId: number | null = null;
     private laby!: Laby;
     private levelView!: Level;
-    private static readonly BASE_SEED = 123456;
 
     private needsRender = true;
 
@@ -40,6 +39,10 @@ export class Game {
     private lastHistorySaveAt = 0;
     private lastSavedHistoryLen = 0;
     private markers = new Set<number>();
+    private randomWalkHeld = false;
+    private randomWalkRepeat = false;
+    private randomWalkDelayUntil = 0;
+    private randomWalkHoldStart = 0;
 
     // Mouse-drag Panning (temporär, Kamera folgt erst nach Bewegung wieder)
     private dragging = false;
@@ -132,10 +135,10 @@ export class Game {
 
     private startTurboLoop() {
         const loop = () => {
-            this.update();
             // Burst-Rendering bis mindestens 10 ms vergangen sind (Speed-Test)
             const minTime = performance.now() + 10;
             do {
+                this.update();
                 this.render();
                 this.fpsFrames++;
             } while (performance.now() < minTime);
@@ -178,9 +181,8 @@ export class Game {
             const stepKey = this.input.consumeStepKey();
             if (stepKey) {
                 this.updatePlayer(stepKey);
-            } else if (this.input.consumeKey('m', 'M')) {
-                const randomStep = this.getRandomStepDirection();
-                if (randomStep) this.updatePlayer(randomStep);
+            } else {
+                this.handleRandomWalk();
             }
         }
 
@@ -387,7 +389,7 @@ export class Game {
         for (let i = 0; i < gameLevel; i++) {
             if (w / h < 1.61803399) w += 2; else h += 2;
         }
-        return new Laby(w, h, Game.BASE_SEED + w + h + gameLevel);
+        return new Laby(w, h, Consts.labySeedBase + w + h + gameLevel);
     }
 
     private canStepTo(cx: number, cy: number, nx: number, ny: number): boolean {
@@ -536,6 +538,48 @@ export class Game {
         }
         this.autoClearMarkerAt(this.player.x, this.player.y);
         this.needsRender = true;
+    }
+
+    private handleRandomWalk() {
+        const now = performance.now();
+        const mPressed = this.input.isPressed('m', 'M');
+        const mEdge = this.input.consumeKey('m', 'M');
+
+        if (!mPressed) {
+            this.randomWalkHeld = false;
+            this.randomWalkRepeat = false;
+            this.randomWalkDelayUntil = 0;
+            this.randomWalkHoldStart = 0;
+            return;
+        }
+
+        if (!this.randomWalkHeld) {
+            this.randomWalkHeld = true;
+            this.randomWalkRepeat = false;
+            this.randomWalkHoldStart = now;
+            this.randomWalkDelayUntil = now + Consts.randomWalkRepeatDelayMs;
+        }
+
+        if (!this.randomWalkRepeat) {
+            if (mEdge) this.performRandomStep();
+            if (now >= this.randomWalkDelayUntil) this.randomWalkRepeat = true;
+            return;
+        }
+
+        const holdDuration = now - this.randomWalkHoldStart;
+        const repeatCount = holdDuration >= Consts.randomWalkRepeatDelayMs * 2
+            ? Math.max(1, Math.floor(Consts.randomWalkRepeatMultiplier))
+            : 1;
+        this.performRandomStep(repeatCount);
+    }
+
+    private performRandomStep(count = 1) {
+        for (let i = 0; i < count; i++) {
+            const step = this.getRandomStepDirection();
+            if (!step) return;
+            this.updatePlayer(step);
+            if (this.player.x === this.goal.x && this.player.y === this.goal.y) return;
+        }
     }
 
     private getRandomStepDirection(): 'L' | 'R' | 'U' | 'D' | 'B' | null {

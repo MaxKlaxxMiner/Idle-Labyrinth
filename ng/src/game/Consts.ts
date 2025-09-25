@@ -1,4 +1,7 @@
 export const Consts = {
+    labySeedBase: 123456,
+    randomWalkRepeatDelayMs: 2000,
+    randomWalkRepeatMultiplier: 3,
     colors: {
         background: '#0b0b0b',
         wall: '#1f2937',
