@@ -19,6 +19,7 @@ export class Level {
     trailColor32 = 0;
     backtrackColor32 = 0;
     deadendColor32 = 0;
+    private showGrid = true;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -60,6 +61,10 @@ export class Level {
     clearHighlights() {
         this.chunks = new Array(this.chunksX * this.chunksY).fill(null);
         this.markCell(1, 1, 'trail'); // Startfeld pauschal markieren
+    }
+
+    setShowGrid(show: boolean) {
+        this.showGrid = show;
     }
 
     setPixel(x: number, y: number, color: number) {
@@ -131,12 +136,12 @@ export class Level {
                 const dy = oy + (chunk.ofsY + sy) * tileSize;
                 const dw = sw * tileSize;
                 const dh = sh * tileSize;
-                chunk.drawTo(this.ctx, sx, sy, sw, sh, dx, dy, dw, dh);
+                this.ctx.drawImage(chunk.canvas, sx, sy, sw, sh, dx, dy, dw, dh);
             }
         }
 
         // Gaps (1px) zwischen den Zellen/NODES optional überlagern
-        if (tileSize >= Consts.sizes.gapThreshold) {
+        if (this.showGrid && tileSize >= Consts.sizes.gapThreshold) {
             this.drawGaps(ox, oy, tileSize);
         }
     }

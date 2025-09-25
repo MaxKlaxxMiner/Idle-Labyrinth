@@ -36,15 +36,6 @@ export class PixBuffer256 {
         }
     }
 
-    // Zeichnet den internen Canvas skaliert/versetzt in einen Ziel-Context
-    drawTo(
-        dst: CanvasRenderingContext2D,
-        sx: number, sy: number, sw: number, sh: number,
-        dx: number, dy: number, dw: number, dh: number,
-    ): void {
-        dst.drawImage(this.canvas, sx, sy, sw, sh, dx, dy, dw, dh);
-    }
-
     setPixel(x: number, y: number, color: number): void {
         x -= this.ofsX;
         y -= this.ofsY;

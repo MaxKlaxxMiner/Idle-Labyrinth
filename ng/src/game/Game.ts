@@ -26,6 +26,7 @@ export class Game {
     private fastTimer: number | null = null;
 
     private camera = new Camera();
+    private showGrid = true;
 
     // Eingabe und Spielerzustand
     private input = new Input();
@@ -66,6 +67,7 @@ export class Game {
         this.ctx = ctx;
         this.hud = new HUDView(document.getElementById('hud') as HTMLElement | null);
         this.levelView = new Level(this.bgCanvas);
+        this.levelView.setShowGrid(this.showGrid);
 
         const saved = this.loadLevel();
         this.level = Number.isFinite(saved) && saved! >= 0 ? saved! : 0;
@@ -217,6 +219,12 @@ export class Game {
                 this.start();
             }, 0);
             this.updateHud();
+        }
+
+        if (this.input.consumeKey('g', 'G')) {
+            this.showGrid = !this.showGrid;
+            this.levelView.setShowGrid(this.showGrid);
+            this.needsRender = true;
         }
 
         // Ziel erreicht?

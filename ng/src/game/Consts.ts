@@ -13,7 +13,7 @@ export const Consts = {
     sizes: {
         basePad: 8,
         minTileSize: 1,
-        gapThreshold: 8,
+        gapThreshold: 4,
         smallTileThreshold: 5,
         hudFont: '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
     },
