@@ -143,19 +143,38 @@ export class Level {
 
     // Zeichnet 1px-Linien in Hintergrundfarbe zwischen allen Zellen (sichtbare Abstände)
     private drawGaps(ox: number, oy: number, tileSize: number) {
+        if (tileSize <= 0) return;
+
         const ctx = this.ctx;
+        const canvasW = this.canvas.width;
+        const canvasH = this.canvas.height;
         const totalW = this.pixW * tileSize;
         const totalH = this.pixH * tileSize;
+
+        const visibleX0 = Math.max(0, ox);
+        const visibleY0 = Math.max(0, oy);
+        const visibleX1 = Math.min(ox + totalW, canvasW);
+        const visibleY1 = Math.min(oy + totalH, canvasH);
+        const visibleW = visibleX1 - visibleX0;
+        const visibleH = visibleY1 - visibleY0;
+        if (visibleW <= 0 || visibleH <= 0) return;
+
         ctx.fillStyle = Consts.colors.background;
+
+        const startGapX = Math.max(1, Math.ceil((0 - ox) / tileSize));
+        const endGapX = Math.min(this.pixW - 1, Math.floor((canvasW - 1 - ox) / tileSize));
         // Vertikale Gaps
-        for (let x = 1; x < this.pixW; x++) {
+        for (let x = startGapX; x <= endGapX; x++) {
             const dx = ox + x * tileSize;
-            ctx.fillRect(dx, oy, 1, totalH);
+            ctx.fillRect(dx, visibleY0, 1, visibleH);
         }
+
+        const startGapY = Math.max(1, Math.ceil((0 - oy) / tileSize));
+        const endGapY = Math.min(this.pixH - 1, Math.floor((canvasH - 1 - oy) / tileSize));
         // Horizontale Gaps
-        for (let y = 1; y < this.pixH; y++) {
+        for (let y = startGapY; y <= endGapY; y++) {
             const dy = oy + y * tileSize;
-            ctx.fillRect(ox, dy, totalW, 1);
+            ctx.fillRect(visibleX0, dy, visibleW, 1);
         }
     }
 
