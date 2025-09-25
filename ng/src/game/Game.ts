@@ -176,7 +176,12 @@ export class Game {
         } else {
             // Diskretes Vorwärts-Stepping: pro Tastendruck 1 Knoten (2 Tiles)
             const stepKey = this.input.consumeStepKey();
-            if (stepKey) this.updatePlayer(stepKey);
+            if (stepKey) {
+                this.updatePlayer(stepKey);
+            } else if (this.input.consumeKey('m', 'M')) {
+                const randomStep = this.getRandomStepDirection();
+                if (randomStep) this.updatePlayer(randomStep);
+            }
         }
 
         // Kamera-Follow mit Dead-Zone (bei Drag pausieren)
@@ -531,6 +536,40 @@ export class Game {
         }
         this.autoClearMarkerAt(this.player.x, this.player.y);
         this.needsRender = true;
+    }
+
+    private getRandomStepDirection(): 'L' | 'R' | 'U' | 'D' | 'B' | null {
+        const cx = this.player.x;
+        const cy = this.player.y;
+        const options: Array<{ dir: 'L' | 'R' | 'U' | 'D'; dx: number; dy: number }> = [
+            {dir: 'L', dx: -2, dy: 0},
+            {dir: 'R', dx: 2, dy: 0},
+            {dir: 'U', dx: 0, dy: -2},
+            {dir: 'D', dx: 0, dy: 2},
+        ];
+        const valid: Array<'L' | 'R' | 'U' | 'D'> = [];
+        for (const option of options) {
+            const nx = cx + option.dx;
+            const ny = cy + option.dy;
+            if (!this.canStepTo(cx, cy, nx, ny)) continue;
+            const targetColor = this.levelView.getPixel(nx, ny);
+            if (targetColor === this.levelView.deadendColor32 || targetColor === this.levelView.trailColor32) continue;
+            valid.push(option.dir);
+        }
+        if (valid.length === 0) return this.history.length > 0 ? 'B' : null;
+
+        // --- rechts/unten bevorzugen (je nach Position zum Ziel) ---
+        if (this.goal.x - this.player.x >= this.goal.y - this.player.y) {
+            for (let i = 0; i < valid.length; i++) if (valid[i] == 'R') return 'R';
+            for (let i = 0; i < valid.length; i++) if (valid[i] == 'D') return 'D';
+        } else {
+            for (let i = 0; i < valid.length; i++) if (valid[i] == 'D') return 'D';
+            for (let i = 0; i < valid.length; i++) if (valid[i] == 'R') return 'R';
+        }
+
+        // --- Rest: zufällige Wahl ---
+        const index = Math.floor(Math.random() * valid.length);
+        return valid[index];
     }
 
     private hardReset() {
