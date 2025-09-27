@@ -43,6 +43,7 @@ export class Game {
     private randomWalkRepeat = false;
     private randomWalkDelayUntil = 0;
     private randomWalkHoldStart = 0;
+    private randomWalkMulti = 1;
 
     // Mouse-drag Panning (temporär, Kamera folgt erst nach Bewegung wieder)
     private dragging = false;
@@ -550,6 +551,7 @@ export class Game {
             this.randomWalkRepeat = false;
             this.randomWalkDelayUntil = 0;
             this.randomWalkHoldStart = 0;
+            this.randomWalkMulti = 1;
             return;
         }
 
@@ -558,6 +560,7 @@ export class Game {
             this.randomWalkRepeat = false;
             this.randomWalkHoldStart = now;
             this.randomWalkDelayUntil = now + Consts.randomWalkRepeatDelayMs;
+            this.randomWalkMulti = 1;
         }
 
         if (!this.randomWalkRepeat) {
@@ -567,10 +570,11 @@ export class Game {
         }
 
         const holdDuration = now - this.randomWalkHoldStart;
-        const repeatCount = holdDuration >= Consts.randomWalkRepeatDelayMs * 2
-            ? Math.max(1, Math.floor(Consts.randomWalkRepeatMultiplier))
-            : 1;
-        this.performRandomStep(repeatCount);
+        if (holdDuration >= Consts.randomWalkRepeatDelayMs * 2) {
+            this.randomWalkHoldStart += Consts.randomWalkRepeatDelayMs / 8;
+            this.randomWalkMulti++;
+        }
+        this.performRandomStep(this.randomWalkMulti);
     }
 
     private performRandomStep(count = 1) {
@@ -596,6 +600,7 @@ export class Game {
             const nx = cx + option.dx;
             const ny = cy + option.dy;
             if (!this.canStepTo(cx, cy, nx, ny)) continue;
+            if (nx === this.goal.x && ny === this.goal.y) return null;
             const targetColor = this.levelView.getPixel(nx, ny);
             if (targetColor === this.levelView.deadendColor32 || targetColor === this.levelView.trailColor32) continue;
             valid.push(option.dir);

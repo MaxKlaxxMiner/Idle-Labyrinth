@@ -1,7 +1,6 @@
 export const Consts = {
     labySeedBase: 123456,
     randomWalkRepeatDelayMs: 2000,
-    randomWalkRepeatMultiplier: 3,
     colors: {
         background: '#0b0b0b',
         wall: '#1f2937',
@@ -16,7 +15,7 @@ export const Consts = {
     sizes: {
         basePad: 8,
         minTileSize: 1,
-        gapThreshold: 4,
+        gapThreshold: 5,
         smallTileThreshold: 5,
         hudFont: '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
     },
@@ -25,7 +24,7 @@ export const Consts = {
     },
     zoom: {
         steps: [1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 21, 26, 34, 42, 55, 68, 89, 110, 144],
-        minStartTileSize: 10,
+        minStartTileSize: 6,
     },
     largeLevels: new Set<number>([
         1, 2, 4, 6, 8, 11, 15, 20, 26, 33, 42, 54, 69, 88,
