@@ -4,6 +4,7 @@ import {Consts} from './Consts';
 import {Level} from '@/view/Level';
 import {Camera} from '@/view/Camera';
 import {HUDView} from '@/ui/HUDView';
+import {StringBuilder} from "@/lib/StringBuilder";
 
 export class Game {
     private bgCanvas: HTMLCanvasElement;
@@ -34,8 +35,8 @@ export class Game {
     private goal = {x: 0, y: 0};
     private moves = 0;
     private resetLatch = false;
-    private history = '';
-    private historyRaw = '';
+    private history = new StringBuilder();
+    private historyRaw = new StringBuilder();
     private lastHistorySaveAt = 0;
     private lastSavedHistoryLen = 0;
     private markers = new Set<number>();
@@ -444,8 +445,8 @@ export class Game {
         this.laby = this.createLabyForLevel(this.level);
 
         this.moves = 0;
-        this.history = '';
-        this.historyRaw = '';
+        this.history = new StringBuilder();
+        this.historyRaw = new StringBuilder();
         // Sofort speichern bei Restart/Levelwechsel (leerer Verlauf)
         if (saveImmediate) this.saveHistoryRaw(true);
         this.player.x = 1;
@@ -468,15 +469,15 @@ export class Game {
     private updatePlayer(inputKey: 'L' | 'R' | 'U' | 'D' | 'B' | 'M') {
         this.followPaused = false;
         if (inputKey === 'M') {
-            this.historyRaw += 'M';
+            this.historyRaw.append('M');
             this.toggleMarkerAt(this.player.x, this.player.y);
             return;
         }
 
         if (inputKey === 'B') {
-            this.historyRaw += 'B';
-            if (this.history.length === 0) return;
-            const last = this.history.charAt(this.history.length - 1);
+            this.historyRaw.append('B');
+            if (this.history.length() === 0) return;
+            const last = this.history.lastChar();
             let dx = 0, dy = 0;
             if (last === 'L') dx = 1;
             else if (last === 'R') dx = -1;
@@ -494,7 +495,7 @@ export class Game {
             this.moves = Math.max(0, this.moves - 1);
             this.autoClearMarkerAt(this.player.x, this.player.y);
             this.needsRender = true;
-            this.history = this.history.slice(0, -1);
+            this.history.removeLastChar();
             return;
         }
 
@@ -514,9 +515,9 @@ export class Game {
         this.player.x = nx;
         this.player.y = ny;
 
-        this.historyRaw += inputKey;
+        this.historyRaw.append(inputKey);
 
-        const last = this.history.charAt(this.history.length - 1);
+        const last = this.history.lastChar();
         const isUndo =
             (last === 'L' && inputKey === 'R') ||
             (last === 'R' && inputKey === 'L') ||
@@ -529,12 +530,12 @@ export class Game {
         if (isUndo) {
             const highlightMode = this.getBacktrackHighlightMode(prevX, prevY);
             this.applyBacktrackHighlight(prevX, prevY, cx, cy, highlightMode);
-            this.history = this.history.slice(0, -1);
+            this.history.removeLastChar();
             this.moves = Math.max(0, this.moves - 1);
         } else {
             this.levelView.markCell(nx - cx, ny - cy, 'trail');
             this.levelView.markCell(nx, ny, 'trail');
-            this.history += inputKey;
+            this.history.append(inputKey);
             this.moves += 1;
         }
         this.autoClearMarkerAt(this.player.x, this.player.y);
@@ -573,7 +574,7 @@ export class Game {
         if (holdDuration >= Consts.randomWalkRepeatDelayMs * 2) {
             this.randomWalkHoldStart += Consts.randomWalkRepeatDelayMs / 8;
             this.randomWalkMulti += 1 + (this.randomWalkMulti * 1.01 >> 1);
-            if (this.randomWalkMulti > 4096) this.randomWalkMulti = 4096;
+            if (this.randomWalkMulti > 16384) this.randomWalkMulti = 16384;
         }
         this.performRandomStep(this.randomWalkMulti);
     }
@@ -606,7 +607,7 @@ export class Game {
             if (targetColor === this.levelView.deadendColor32 || targetColor === this.levelView.trailColor32) continue;
             valid.push(option.dir);
         }
-        if (valid.length === 0) return this.history.length > 0 ? 'B' : null;
+        if (valid.length === 0) return this.history.length() > 0 ? 'B' : null;
 
         // --- rechts/unten bevorzugen (je nach Position zum Ziel) ---
         if (this.goal.x - this.player.x >= this.goal.y - this.player.y) {
@@ -662,16 +663,17 @@ export class Game {
         try {
             const now = performance.now();
             if (!force) {
-                if (this.historyRaw.length === this.lastSavedHistoryLen) return;
+                if (this.historyRaw.length() === this.lastSavedHistoryLen) return;
                 if (now - this.lastHistorySaveAt < 3000) return;
             }
-            if (this.historyRaw.length > 2000000) {
-                console.log("Game: Reduce History: " + this.historyRaw.length + " -> " + this.history.length);
-                this.historyRaw = this.history;
+            if (this.historyRaw.length() > 2000000) {
+                console.log("Game: Reduce History: " + this.historyRaw.length() + " -> " + this.history.length());
+                this.historyRaw = new StringBuilder();
+                this.historyRaw.append(this.history.toString());
             }
             //console.log("Game: Save History: " + this.historyRaw.length);
-            localStorage.setItem('idle-laby-historyRaw', this.historyRaw);
-            this.lastSavedHistoryLen = this.historyRaw.length;
+            localStorage.setItem('idle-laby-historyRaw', this.historyRaw.toString());
+            this.lastSavedHistoryLen = this.historyRaw.length();
             this.lastHistorySaveAt = now;
         } catch {
         }
