@@ -537,9 +537,141 @@ export class Game {
             this.levelView.markCell(nx, ny, 'trail');
             this.history.append(inputKey);
             this.moves += 1;
+            if (ny === 1 || nx === this.laby.pixWidth - 2) {
+                this.fillTR();
+            }
+            if (nx === 1 || ny === this.laby.pixHeight - 2) {
+                this.fillBL();
+            }
         }
         this.autoClearMarkerAt(this.player.x, this.player.y);
         this.needsRender = true;
+    }
+
+    private fillBL() {
+        const moves = this.history.toString();
+        let px = 1;
+        let py = 1;
+        let pix = 0 | 0;
+        for (let i = 0; i < moves.length; i++) {
+            switch (moves[i]) {
+                case 'L':
+                    pix = this.levelView.getPixel(px, py - 1);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px, py - 1, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px, py - 2, this.levelView.deadendColor32);
+                    }
+                    px -= 2;
+                    pix = this.levelView.getPixel(px, py - 1);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px, py - 1, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px, py - 2, this.levelView.deadendColor32);
+                    }
+                    break;
+                case 'R':
+                    pix = this.levelView.getPixel(px, py + 1);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px, py + 1, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px, py + 2, this.levelView.deadendColor32);
+                    }
+                    px += 2;
+                    pix = this.levelView.getPixel(px, py + 1);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px, py + 1, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px, py + 2, this.levelView.deadendColor32);
+                    }
+                    break;
+                case 'U':
+                    pix = this.levelView.getPixel(px + 1, py);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px + 1, py, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px + 2, py, this.levelView.deadendColor32);
+                    }
+                    py -= 2;
+                    pix = this.levelView.getPixel(px + 1, py);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px + 1, py, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px + 2, py, this.levelView.deadendColor32);
+                    }
+                    break;
+                case 'D':
+                    pix = this.levelView.getPixel(px - 1, py);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px - 1, py, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px - 2, py, this.levelView.deadendColor32);
+                    }
+                    py += 2;
+                    pix = this.levelView.getPixel(px - 1, py);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px - 1, py, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px - 2, py, this.levelView.deadendColor32);
+                    }
+                    break;
+            }
+        }
+    }
+
+    private fillTR() {
+        const moves = this.history.toString();
+        let px = 1;
+        let py = 1;
+        let pix = 0 | 0;
+        for (let i = 0; i < moves.length; i++) {
+            switch (moves[i]) {
+                case 'L':
+                    pix = this.levelView.getPixel(px, py + 1);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px, py + 1, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px, py + 2, this.levelView.deadendColor32);
+                    }
+                    px -= 2;
+                    pix = this.levelView.getPixel(px, py + 1);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px, py + 1, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px, py + 2, this.levelView.deadendColor32);
+                    }
+                    break;
+                case 'R':
+                    pix = this.levelView.getPixel(px, py - 1);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px, py - 1, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px, py - 2, this.levelView.deadendColor32);
+                    }
+                    px += 2;
+                    pix = this.levelView.getPixel(px, py - 1);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px, py - 1, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px, py - 2, this.levelView.deadendColor32);
+                    }
+                    break;
+                case 'U':
+                    pix = this.levelView.getPixel(px - 1, py);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px - 1, py, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px - 2, py, this.levelView.deadendColor32);
+                    }
+                    py -= 2;
+                    pix = this.levelView.getPixel(px - 1, py);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px - 1, py, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px - 2, py, this.levelView.deadendColor32);
+                    }
+                    break;
+                case 'D':
+                    pix = this.levelView.getPixel(px + 1, py);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px + 1, py, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px + 2, py, this.levelView.deadendColor32);
+                    }
+                    py += 2;
+                    pix = this.levelView.getPixel(px + 1, py);
+                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
+                        this.levelView.setPixel(px + 1, py, this.levelView.deadendColor32);
+                        this.levelView.setPixel(px + 2, py, this.levelView.deadendColor32);
+                    }
+                    break;
+            }
+        }
     }
 
     private handleRandomWalk() {

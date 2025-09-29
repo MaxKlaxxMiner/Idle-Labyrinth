@@ -50,6 +50,6 @@ export class PixBuffer256 {
         x -= this.ofsX;
         y -= this.ofsY;
         if (x < 0 || y < 0 || x >= 256 || y >= 256) return 0;
-        return this.u32[(y << 8) + x];
+        return this.u32[(y << 8) + x]|0;
     }
 }
