@@ -572,7 +572,8 @@ export class Game {
         const holdDuration = now - this.randomWalkHoldStart;
         if (holdDuration >= Consts.randomWalkRepeatDelayMs * 2) {
             this.randomWalkHoldStart += Consts.randomWalkRepeatDelayMs / 8;
-            this.randomWalkMulti++;
+            this.randomWalkMulti += 1 + (this.randomWalkMulti * 1.01 >> 1);
+            if (this.randomWalkMulti > 4096) this.randomWalkMulti = 4096;
         }
         this.performRandomStep(this.randomWalkMulti);
     }
@@ -664,6 +665,11 @@ export class Game {
                 if (this.historyRaw.length === this.lastSavedHistoryLen) return;
                 if (now - this.lastHistorySaveAt < 3000) return;
             }
+            if (this.historyRaw.length > 2000000) {
+                console.log("Game: Reduce History: " + this.historyRaw.length + " -> " + this.history.length);
+                this.historyRaw = this.history;
+            }
+            //console.log("Game: Save History: " + this.historyRaw.length);
             localStorage.setItem('idle-laby-historyRaw', this.historyRaw);
             this.lastSavedHistoryLen = this.historyRaw.length;
             this.lastHistorySaveAt = now;
