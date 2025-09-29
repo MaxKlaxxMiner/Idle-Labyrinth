@@ -41,7 +41,7 @@ export class PixBuffer256 {
         y -= this.ofsY;
         if (x < 0 || y < 0 || x >= 256 || y >= 256) return;
         const index = (y << 8) + x;
-        if (this.u32[index] == color) return;
+        if (this.u32[index] === color) return;
         this.u32[index] = color;
         this.changed = true;
     }

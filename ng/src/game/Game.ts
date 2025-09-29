@@ -45,6 +45,8 @@ export class Game {
     private randomWalkDelayUntil = 0;
     private randomWalkHoldStart = 0;
     private randomWalkMulti = 1;
+    private lastFillX = 0;
+    private lastFillY = 0;
 
     // Mouse-drag Panning (temporär, Kamera folgt erst nach Bewegung wieder)
     private dragging = false;
@@ -549,6 +551,9 @@ export class Game {
     }
 
     private fillBL() {
+        if (Math.abs(this.lastFillX - this.player.x) + Math.abs(this.lastFillY - this.player.y) < this.history.length() / 256) return; // skip
+        this.lastFillX = this.player.x;
+        this.lastFillY = this.player.y;
         const moves = this.history.toString();
         let px = 1;
         let py = 1;
@@ -612,6 +617,9 @@ export class Game {
     }
 
     private fillTR() {
+        if (Math.abs(this.lastFillX - this.player.x) + Math.abs(this.lastFillY - this.player.y) < this.history.length() / 256) return; // skip
+        this.lastFillX = this.player.x;
+        this.lastFillY = this.player.y;
         const moves = this.history.toString();
         let px = 1;
         let py = 1;

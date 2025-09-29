@@ -14,7 +14,7 @@ export class Laby {
         width = (width + 1) >> 1;
         if (height < 5) height = 5;
         height = (height + 1) >> 1;
-        if ((width - 2) * (height - 2) >= 1 << 28) throw "out of range";
+        if ((width - 2) * (height - 2) >= 1 << 30) throw "out of range";
         this.width = width;
         this.height = height;
         this.pixWidth = width * 2 - 1;
