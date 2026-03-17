@@ -10,3 +10,4 @@ obj
 *.min.js
 /html/*.wasm
 /.idea
+/ng/.claude/settings.local.json
