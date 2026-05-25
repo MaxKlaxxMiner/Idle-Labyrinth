@@ -2,25 +2,21 @@
   "name": "idle-labyrinth",
   "version": "0.1.0",
   "private": true,
-  "description": "Idle Labyrinth – web idle game scaffold (TypeScript + Webpack)",
+  "description": "Idle Labyrinth – web idle game scaffold (TypeScript + Vite)",
   "license": "UNLICENSED",
+  "type": "module",
   "scripts": {
-    "dev": "webpack serve --config webpack.config.js --mode development",
-    "build": "webpack --config webpack.config.js --mode production",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
     "node": ">=18"
   },
   "devDependencies": {
-    "css-loader": "^7.1.4",
-    "html-webpack-plugin": "^5.6.6",
-    "source-map-loader": "^5.0.0",
-    "style-loader": "^4.0.0",
-    "ts-loader": "^9.5.7",
+    "@types/node": "^22.10.0",
     "typescript": "^6.0.2",
-    "webpack": "^5.106.0",
-    "webpack-cli": "^7.0.2",
-    "webpack-dev-server": "^5.2.3"
+    "vite": "^6.0.0"
   }
 }
