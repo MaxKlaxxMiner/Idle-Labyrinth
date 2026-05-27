@@ -93,19 +93,25 @@ export class Level {
         this.setPixel(x, y, color);
     }
 
-    // Draw labyrinth + overlays in 1px-Bitmap und anschließend skaliert blitten
-    render(ox: number, oy: number, tileSize: number) {
+    // Draw labyrinth + overlays in 1px-Bitmap und anschließend skaliert blitten.
+    // Optionen:
+    //   clear:     true (Standard) löscht den Canvas vor dem Zeichnen
+    //   allChunks: true rendert alle Chunks unabhängig vom sichtbaren Bereich
+    //              (z. B. wenn der Kontext rotiert/transformiert wurde und der
+    //              Visibility-Filter im Canvas-Rechteck nicht mehr passt)
+    render(ox: number, oy: number, tileSize: number, opts?: {clear?: boolean; allChunks?: boolean}) {
         const w = this.canvas.width;
         const h = this.canvas.height;
-        this.ctx.clearRect(0, 0, w, h);
+        if (opts?.clear !== false) this.ctx.clearRect(0, 0, w, h);
 
         // Sichtbaren Pixelbereich (in Laby-Pixelkoordinaten) bestimmen
         // x sichtbar, wenn [ox + x*tileSize, ox + (x+1)*tileSize) mit [0,w) schneidet
         // y analog
-        const visX0 = Math.max(0, Math.floor((0 - ox) / tileSize));
-        const visY0 = Math.max(0, Math.floor((0 - oy) / tileSize));
-        const visX1 = Math.min(this.pixW - 1, Math.ceil((w - ox) / tileSize) - 1);
-        const visY1 = Math.min(this.pixH - 1, Math.ceil((h - oy) / tileSize) - 1);
+        const allChunks = opts?.allChunks === true;
+        const visX0 = allChunks ? 0 : Math.max(0, Math.floor((0 - ox) / tileSize));
+        const visY0 = allChunks ? 0 : Math.max(0, Math.floor((0 - oy) / tileSize));
+        const visX1 = allChunks ? this.pixW - 1 : Math.min(this.pixW - 1, Math.ceil((w - ox) / tileSize) - 1);
+        const visY1 = allChunks ? this.pixH - 1 : Math.min(this.pixH - 1, Math.ceil((h - oy) / tileSize) - 1);
 
         if (visX0 > visX1 || visY0 > visY1) return;
 
