@@ -78,7 +78,7 @@ export class MainMenu {
 
     private build() {
         this.root.innerHTML = `
-            <div class="menu-panel">
+            <div class="menu-panel fancy">
                 <h1 class="menu-title">
                     Idle <span class="menu-title-accent">Labyrinth</span>
                     <span class="menu-version">v${__APP_VERSION__}</span>

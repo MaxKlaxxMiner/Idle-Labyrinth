@@ -72,9 +72,13 @@ canvas#menu-bg {
 
 .menu-panel {
     padding: 2.618em;
-    background: transparent;
     border: 0.1em solid rgba(253, 224, 71, 0.18);
     border-radius: 1.618em;
+    background: rgba(253, 224, 71, 0.05);
+}
+
+.menu-panel.fancy {
+    background: transparent;
     box-shadow: 0 1.5em 3.75em rgba(0, 0, 0, 0.55), 0 0 5em rgba(253, 224, 71, 0.3);
     backdrop-filter: blur(0.2em) brightness(200%) hue-rotate(-150deg);
     -webkit-backdrop-filter: blur(0.2em) brightness(200%) hue-rotate(-150deg);

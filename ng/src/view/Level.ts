@@ -148,12 +148,14 @@ export class Level {
 
         // Gaps (1px) zwischen den Zellen/NODES optional überlagern
         if (this.showGrid && tileSize >= Consts.sizes.gapThreshold) {
-            this.drawGaps(ox, oy, tileSize);
+            this.drawGaps(ox, oy, tileSize, allChunks);
         }
     }
 
-    // Zeichnet 1px-Linien in Hintergrundfarbe zwischen allen Zellen (sichtbare Abstände)
-    private drawGaps(ox: number, oy: number, tileSize: number) {
+    // Zeichnet 1px-Linien in Hintergrundfarbe zwischen allen Zellen (sichtbare Abstände).
+    // Mit allCells werden Gaps über die volle Laby-Ausdehnung gezeichnet, ohne Clamping
+    // gegen das Canvas-Rechteck (nötig wenn der Kontext gedreht/transformiert ist).
+    private drawGaps(ox: number, oy: number, tileSize: number, allCells = false) {
         if (tileSize <= 0) return;
 
         const ctx = this.ctx;
@@ -162,26 +164,41 @@ export class Level {
         const totalW = this.pixW * tileSize;
         const totalH = this.pixH * tileSize;
 
-        const visibleX0 = Math.max(0, ox);
-        const visibleY0 = Math.max(0, oy);
-        const visibleX1 = Math.min(ox + totalW, canvasW);
-        const visibleY1 = Math.min(oy + totalH, canvasH);
+        let visibleX0: number, visibleY0: number, visibleX1: number, visibleY1: number;
+        let startGapX: number, endGapX: number, startGapY: number, endGapY: number;
+
+        if (allCells) {
+            visibleX0 = ox;
+            visibleY0 = oy;
+            visibleX1 = ox + totalW;
+            visibleY1 = oy + totalH;
+            startGapX = 1;
+            endGapX = this.pixW - 1;
+            startGapY = 1;
+            endGapY = this.pixH - 1;
+        } else {
+            visibleX0 = Math.max(0, ox);
+            visibleY0 = Math.max(0, oy);
+            visibleX1 = Math.min(ox + totalW, canvasW);
+            visibleY1 = Math.min(oy + totalH, canvasH);
+            startGapX = Math.max(1, Math.ceil((0 - ox) / tileSize));
+            endGapX = Math.min(this.pixW - 1, Math.floor((canvasW - 1 - ox) / tileSize));
+            startGapY = Math.max(1, Math.ceil((0 - oy) / tileSize));
+            endGapY = Math.min(this.pixH - 1, Math.floor((canvasH - 1 - oy) / tileSize));
+        }
+
         const visibleW = visibleX1 - visibleX0;
         const visibleH = visibleY1 - visibleY0;
         if (visibleW <= 0 || visibleH <= 0) return;
 
         ctx.fillStyle = Consts.colors.background;
 
-        const startGapX = Math.max(1, Math.ceil((0 - ox) / tileSize));
-        const endGapX = Math.min(this.pixW - 1, Math.floor((canvasW - 1 - ox) / tileSize));
         // Vertikale Gaps
         for (let x = startGapX; x <= endGapX; x++) {
             const dx = ox + x * tileSize;
             ctx.fillRect(dx, visibleY0, 1, visibleH);
         }
 
-        const startGapY = Math.max(1, Math.ceil((0 - oy) / tileSize));
-        const endGapY = Math.min(this.pixH - 1, Math.floor((canvasH - 1 - oy) / tileSize));
         // Horizontale Gaps
         for (let y = startGapY; y <= endGapY; y++) {
             const dy = oy + y * tileSize;
