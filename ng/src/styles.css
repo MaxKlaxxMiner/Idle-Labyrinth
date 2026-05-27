@@ -67,26 +67,21 @@ canvas#menu-bg {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1.5em;
     box-sizing: border-box;
 }
 
 .menu-panel {
-    width: min(26.25em, 92vw);
-    padding: 2em 1.75em 1.75em 1.75em;
-    background: rgba(15, 17, 21, 0.78);
-    border: 1px solid rgba(253, 224, 71, 0.18);
-    border-radius: 0.875em;
-    box-shadow:
-        0 0 0 1px rgba(0, 0, 0, 0.4) inset,
-        0 1.5em 3.75em rgba(0, 0, 0, 0.55),
-        0 0 2em rgba(56, 189, 248, 0.08);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    padding: 2.618em;
+    background: transparent;
+    border: 0.1em solid rgba(253, 224, 71, 0.18);
+    border-radius: 1.618em;
+    box-shadow: 0 1.5em 3.75em rgba(0, 0, 0, 0.55), 0 0 5em rgba(253, 224, 71, 0.3);
+    backdrop-filter: blur(0.2em) brightness(200%) hue-rotate(-150deg);
+    -webkit-backdrop-filter: blur(0.2em) brightness(200%) hue-rotate(-150deg);
 }
 
 .menu-title {
-    margin: 0 0 0.618em;
+    margin: -0.25em 0 0.618em;
     font-size: 2.618em;
     font-weight: 600;
     letter-spacing: 0.025em;
@@ -111,7 +106,7 @@ canvas#menu-bg {
 .menu-buttons {
     display: flex;
     flex-direction: column;
-    gap: 0.75em;
+    gap: 0.618em;
 }
 
 .menu-btn {
@@ -119,7 +114,6 @@ canvas#menu-bg {
     appearance: none;
     -webkit-appearance: none;
     font: inherit;
-    color: inherit;
     margin: 0.15em 0;
     box-sizing: border-box;
 
@@ -129,9 +123,9 @@ canvas#menu-bg {
     padding: 0.9em 1em;
 
     /* Optik */
-    border: 1px solid rgba(253, 224, 71, 0.35);
-    border-radius: 0.625em;
-    background: linear-gradient(180deg, rgba(31, 41, 55, 0.85) 0%, rgba(17, 22, 30, 0.85) 100%);
+    border: 0.055em solid rgba(253, 224, 71, 0.35);
+    border-radius: 0.618em;
+    background: linear-gradient(180deg, rgba(31, 41, 55, 0.5) 0%, rgba(17, 22, 30, 0.5) 100%);
     color: #fde047;
 
     /* Schrift (überschreibt das `font: inherit` von oben) */
@@ -148,22 +142,42 @@ canvas#menu-bg {
 .menu-btn:hover {
     border-color: rgba(253, 224, 71, 0.85);
     background: linear-gradient(180deg, rgba(50, 64, 84, 0.9) 0%, rgba(30, 38, 50, 0.9) 100%);
-    box-shadow:
-        0 0 0 1px rgba(253, 224, 71, 0.25) inset,
-        0 0 1.125em rgba(253, 224, 71, 0.25);
+    box-shadow: 0 0 0 1px rgba(253, 224, 71, 0.25) inset,
+    0 0 1.125em rgba(253, 224, 71, 0.25);
     transform: translateY(-0.0625em);
 }
 
 .menu-btn:active {
     transform: translateY(0);
-    box-shadow:
-        0 0 0 1px rgba(253, 224, 71, 0.4) inset,
-        0 0 0.625em rgba(253, 224, 71, 0.2);
+    box-shadow: 0 0 0 1px rgba(253, 224, 71, 0.4) inset,
+    0 0 0.625em rgba(253, 224, 71, 0.2);
 }
 
 .menu-btn:focus-visible {
     outline: 2px solid #38bdf8;
     outline-offset: 2px;
+}
+
+.menu-btn[data-act="endless"] {
+    border-color: rgba(74, 222, 128, 0.45);
+    color: #4ade80;
+}
+
+.menu-btn[data-act="endless"]:hover {
+    border-color: rgba(74, 222, 128, 0.9);
+    box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.25) inset,
+    0 0 1.125em rgba(74, 222, 128, 0.3);
+}
+
+.menu-btn[data-act="stats"] {
+    border-color: rgba(56, 189, 248, 0.45);
+    color: #38bdf8;
+}
+
+.menu-btn[data-act="stats"]:hover {
+    border-color: rgba(56, 189, 248, 0.9);
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25) inset,
+    0 0 1.125em rgba(56, 189, 248, 0.3);
 }
 
 .menu-btn-danger {
@@ -173,9 +187,8 @@ canvas#menu-bg {
 
 .menu-btn-danger:hover {
     border-color: rgba(239, 68, 68, 0.9);
-    box-shadow:
-        0 0 0 1px rgba(239, 68, 68, 0.25) inset,
-        0 0 18px rgba(239, 68, 68, 0.3);
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.25) inset,
+    0 0 1.125em rgba(239, 68, 68, 0.3);
 }
 
 /* ---- Stats-Overlay (simpel, später ausbaubar) ---- */
