@@ -27,7 +27,8 @@ export class MenuBackground {
 		if (!ctx) throw new Error('Canvas 2D Context (menu-bg) nicht verfügbar');
 		this.ctx = ctx;
 
-		this.laby = new Laby(this.labyCells, this.labyCells, this.bgSeed);
+		// kein Cache: BG-Laby ist schnell generiert und soll die Modus-Slots nicht überschreiben
+		this.laby = new Laby(this.labyCells, this.labyCells, this.bgSeed, null);
 		this.level = new Level(this.canvas);
 		this.level.setLaby(this.laby);
 		this.level.setShowGrid(true);

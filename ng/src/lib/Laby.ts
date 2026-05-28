@@ -9,7 +9,7 @@ export class Laby {
     readonly getHWall: (pos: number) => boolean;
     readonly getVWall: (pos: number) => boolean;
 
-    constructor(width: number, height: number, seed: number) {
+    constructor(width: number, height: number, seed: number, cache?: LabyCache | null) {
         if (width < 5) width = 5;
         width = (width + 1) >> 1;
         if (height < 5) height = 5;
@@ -20,10 +20,11 @@ export class Laby {
         this.pixWidth = width * 2 - 1;
         this.pixHeight = height * 2 - 1;
         console.log(`Laby: start ${this.pixWidth} x ${this.pixHeight} pixels`);
-        const labyCache = LabyCache.readLaby(this.width * this.height ^ seed);
-        if (labyCache) {
-            this.getHWall = (pos: number): boolean => (labyCache[pos >> 4] & (1 << ((pos << 1) & 31))) != 0;
-            this.getVWall = (pos: number): boolean => (labyCache[pos >> 4] & (1 << (((pos << 1) | 1) & 31))) != 0;
+        const cacheKey = this.width * this.height ^ seed;
+        const cached = cache ? cache.readLaby(cacheKey) : null;
+        if (cached) {
+            this.getHWall = (pos: number): boolean => (cached[pos >> 4] & (1 << ((pos << 1) & 31))) != 0;
+            this.getVWall = (pos: number): boolean => (cached[pos >> 4] & (1 << (((pos << 1) | 1) & 31))) != 0;
             console.log(`Laby: ready. (cached)`);
             return
         }
@@ -191,7 +192,7 @@ export class Laby {
             }
         }
 
-        console.log(`Laby: convert & save...`);
+        console.log(cache ? `Laby: convert & save...` : `Laby: convert...`);
         const tmp = new Uint32Array((width * height * 2 + 31) >> 5);
         this.getHWall = (pos: number): boolean => (tmp[pos >> 4] & (1 << ((pos << 1) & 31))) != 0;
         this.getVWall = (pos: number): boolean => (tmp[pos >> 4] & (1 << (((pos << 1) | 1) & 31))) != 0;
@@ -199,7 +200,7 @@ export class Laby {
             if (getHWall(pos)) tmp[pos >> 4] |= 1 << ((pos << 1) & 31);
             if (getVWall(pos)) tmp[pos >> 4] |= 1 << (((pos << 1) | 1) & 31);
         }
-        LabyCache.saveLaby(this.width * this.height ^ seed, tmp);
+        if (cache) cache.saveLaby(cacheKey, tmp);
         console.log(`Laby: ready.`);
     }
 

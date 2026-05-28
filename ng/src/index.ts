@@ -2,15 +2,32 @@ import './styles.css';
 
 import {Game} from './game/Game';
 import {LabyCache} from '@/lib/LabyCache';
+import {GameSave} from '@/lib/GameSave';
 import {MainMenu, MenuAction} from '@/menu/MainMenu';
 
+// Pro Spielmodus ein eigener Cache- und Save-Slot. BG-Laby läuft ohne Cache.
+const idleCache = new LabyCache('idle');
+const endlessCache = new LabyCache('endless');
+const idleSave = new GameSave('idle');
+const endlessSave = new GameSave('endless');
+
 async function bootstrap() {
-    // IndexedDB-Cache initialisieren, damit LabyCache.readLaby() synchron verwendbar ist
-    try {
-        await LabyCache.init();
-    } catch {
-        // ignorieren, Cache ist optional
+    // Alte (vor-Slot) DBs einmalig wegräumen, damit keine Leichen zurückbleiben
+    for (const db of ['idle-laby-cache']) {
+        try { indexedDB.deleteDatabase(db); } catch { /* ignorieren */ }
     }
+    // Bisherige localStorage-Keys aus der Vor-Save-Ära aufräumen
+    for (const key of ['idle-laby-level', 'idle-laby-historyRaw']) {
+        try { localStorage.removeItem(key); } catch { /* ignorieren */ }
+    }
+
+    // Alle Slots parallel laden, damit der spätere Spielstart synchron lesen kann
+    await Promise.all([
+        idleCache.init().catch(() => { /* ignorieren */ }),
+        endlessCache.init().catch(() => { /* ignorieren */ }),
+        idleSave.init().catch(() => { /* ignorieren */ }),
+        endlessSave.init().catch(() => { /* ignorieren */ }),
+    ]);
 
     const menuRoot = document.getElementById('menu') as HTMLElement | null;
     const bgCanvas = document.getElementById('menu-bg') as HTMLCanvasElement | null;
@@ -22,15 +39,24 @@ async function bootstrap() {
 
     let game: Game | null = null;
 
+    const returnToMenu = () => {
+        if (game) {
+            game.dispose();
+            game = null;
+            (window as any).__game = null;
+        }
+        appRoot.style.display = 'none';
+        menu.show();
+    };
+
     const menu = new MainMenu(menuRoot, bgCanvas, {
         onSelect: (act: MenuAction) => {
             if (act === 'idle' || act === 'endless') {
-                // Idle und Endless starten aktuell beide das bestehende Spiel.
-                // Modus-Trennung kommt später (siehe docs/IDLE_PLAN.md).
-                (window as any).__mode = act;
                 menu.hide();
                 appRoot.style.display = '';
-                game = new Game(gameCanvas);
+                const cache = act === 'endless' ? endlessCache : idleCache;
+                const save = act === 'endless' ? endlessSave : idleSave;
+                game = new Game(gameCanvas, {cache, save, mode: act, onExit: returnToMenu});
                 game.start();
                 (window as any).__game = game;
             } else if (act === 'stats') {
@@ -47,30 +73,25 @@ async function bootstrap() {
 }
 
 function collectStats(): Array<{label: string; value: string}> {
-    const level = localStorage.getItem('idle-laby-level');
-    const historyRaw = localStorage.getItem('idle-laby-historyRaw') ?? '';
-    const moves = (historyRaw.match(/[LRUD]/g) ?? []).length;
-    const undos = (historyRaw.match(/B/g) ?? []).length;
-    const markers = (historyRaw.match(/M/g) ?? []).length;
+    // Save hält intern 0-basiertes Level, für die Anzeige +1
     return [
-        {label: 'Level', value: level ?? '0'},
-        {label: 'Moves', value: String(moves)},
-        {label: 'Undo', value: String(undos)},
-        {label: 'Marker', value: String(markers)},
-        {label: 'Eingabespur', value: `${historyRaw.length} Zeichen`},
+        {label: 'Idle Level', value: String(idleSave.getLevel() + 1)},
+        {label: 'Endless Level', value: String(endlessSave.getLevel() + 1)},
     ];
 }
 
 function clearAllSaves() {
-    // Bekannte Keys gezielt entfernen, andere Daten unangetastet lassen
-    for (const key of ['idle-laby-level', 'idle-laby-historyRaw']) {
-        localStorage.removeItem(key);
+    // Alle Modi-Caches/Saves sowie etwaige Alt-DBs verwerfen
+    const dbs = [
+        'idle-laby-cache', 'idle-laby-cache-idle', 'idle-laby-cache-endless',
+        'idle-laby-save-idle', 'idle-laby-save-endless',
+    ];
+    for (const db of dbs) {
+        try { indexedDB.deleteDatabase(db); } catch { /* ignorieren */ }
     }
-    // IndexedDB-Cache des Labys ebenfalls verwerfen
-    try {
-        indexedDB.deleteDatabase('idle-laby-cache');
-    } catch {
-        // ignorieren
+    // localStorage-Reste der Vor-Save-Ära ebenfalls löschen
+    for (const key of ['idle-laby-level', 'idle-laby-historyRaw']) {
+        try { localStorage.removeItem(key); } catch { /* ignorieren */ }
     }
 }
 

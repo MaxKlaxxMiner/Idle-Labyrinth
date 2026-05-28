@@ -5,6 +5,17 @@ import {Level} from '@/view/Level';
 import {Camera} from '@/view/Camera';
 import {HUDView} from '@/ui/HUDView';
 import {StringBuilder} from "@/lib/StringBuilder";
+import {LabyCache} from "@/lib/LabyCache";
+import {GameSave} from "@/lib/GameSave";
+
+export type GameMode = 'idle' | 'endless';
+
+export interface GameOptions {
+    cache?: LabyCache | null;
+    save?: GameSave | null;
+    mode?: GameMode;
+    onExit?: () => void;
+}
 
 export class Game {
     private bgCanvas: HTMLCanvasElement;
@@ -36,9 +47,6 @@ export class Game {
     private moves = 0;
     private resetLatch = false;
     private history = new StringBuilder();
-    private historyRaw = new StringBuilder();
-    private lastHistorySaveAt = 0;
-    private lastSavedHistoryLen = 0;
     private markers = new Set<number>();
     private randomWalkHeld = false;
     private randomWalkRepeat = false;
@@ -57,8 +65,17 @@ export class Game {
     private dragMoved = false;
     private followPaused = false;
 
-    constructor(canvas: HTMLCanvasElement) {
+    private readonly cache: LabyCache | null;
+    private readonly save: GameSave | null;
+    private readonly mode: GameMode;
+    private readonly onExit: (() => void) | null;
+
+    constructor(canvas: HTMLCanvasElement, opts?: GameOptions) {
         this.bgCanvas = canvas;
+        this.cache = opts?.cache ?? null;
+        this.save = opts?.save ?? null;
+        this.mode = opts?.mode ?? 'idle';
+        this.onExit = opts?.onExit ?? null;
 
         const fg = document.createElement('canvas');
         fg.id = 'game-fg';
@@ -76,15 +93,12 @@ export class Game {
         this.levelView = new Level(this.bgCanvas);
         this.levelView.setShowGrid(this.showGrid);
 
-        const saved = this.loadLevel();
-        this.level = Number.isFinite(saved) && saved! >= 0 ? saved! : 0;
+        this.level = this.save ? this.save.getLevel() : 0;
 
         // Zuerst Viewgröße initialisieren, damit Autofit korrekte Maße erhält
         this.onResize();
 
-        // Initial: Level setzen, aber historyRaw erst nach optionalem Replay speichern
-        this.initLevel(false);
-        this.loadHistoryRawAndReplay();
+        this.initLevel();
 
         // Event-Handler binden und registrieren
         this.onResize = this.onResize.bind(this);
@@ -113,6 +127,19 @@ export class Game {
             clearInterval(this.fastTimer);
         }
         this.fastTimer = null;
+    }
+
+    // Alle Ressourcen und DOM-Bindings sauber abräumen.
+    dispose() {
+        this.stop();
+        window.removeEventListener('resize', this.onResize);
+        this.bgCanvas.removeEventListener('mousedown', this.onMouseDown);
+        window.removeEventListener('mousemove', this.onMouseMove);
+        window.removeEventListener('mouseup', this.onMouseUp);
+        this.bgCanvas.removeEventListener('wheel', this.onWheel);
+        this.input.dispose();
+        // FG-Canvas wurde im Constructor selbst angelegt -> wieder entfernen
+        if (this.canvas.parentElement) this.canvas.parentElement.removeChild(this.canvas);
     }
 
     private startRafLoop() {
@@ -160,6 +187,12 @@ export class Game {
     }
 
     private update() {
+        // ESC -> zurück zum Hauptmenü
+        if (this.input.consumeKey('Escape')) {
+            this.onExit?.();
+            return;
+        }
+
         // Zoom-Steuerung (über Camera)
         let zoomChanged = false;
         if (this.input.consumeKey('0')) {
@@ -240,21 +273,20 @@ export class Game {
 
         // Ziel erreicht?
         if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
-            if (this.isLocalhost()) {
-                // Entwicklung: schneller vorwärts
-                do {
-                    this.level++;
-                } while (!Consts.largeLevels.has(this.level + 1));
-            } else {
-                // Normal: inkrementell
-                this.level++;
-            }
-            this.saveLevel(this.level);
+            this.level = this.computeNextLevel(this.level);
+            this.save?.setLevel(this.level);
             this.initLevel();
         }
+    }
 
-        // Periodischer Autosave der historyRaw (alle 3 s, nur bei Änderungen)
-        this.saveHistoryRaw();
+    // Schritt im Modus auf das nächste Level. Idle: +1, Endless: Sprung auf nächste largeLevels-Stufe.
+    private computeNextLevel(current: number): number {
+        if (this.mode === 'endless') {
+            let next = current + 1;
+            while (!Consts.largeLevels.has(next + 1)) next++;
+            return next;
+        }
+        return current + 1;
     }
 
     private render() {
@@ -393,7 +425,7 @@ export class Game {
         for (let i = 0; i < gameLevel; i++) {
             if (w / h < 1.61803399) w += 2; else h += 2;
         }
-        return new Laby(w, h, Consts.labySeedBase + w + h + gameLevel);
+        return new Laby(w, h, Consts.labySeedBase + w + h + gameLevel, this.cache);
     }
 
     private canStepTo(cx: number, cy: number, nx: number, ny: number): boolean {
@@ -443,14 +475,11 @@ export class Game {
         return open <= 1;
     }
 
-    private initLevel(saveImmediate: boolean = true) {
+    private initLevel() {
         this.laby = this.createLabyForLevel(this.level);
 
         this.moves = 0;
         this.history = new StringBuilder();
-        this.historyRaw = new StringBuilder();
-        // Sofort speichern bei Restart/Levelwechsel (leerer Verlauf)
-        if (saveImmediate) this.saveHistoryRaw(true);
         this.player.x = 1;
         this.player.y = 1;
         this.goal.x = Math.max(1, this.laby.pixWidth - 2);
@@ -471,13 +500,11 @@ export class Game {
     private updatePlayer(inputKey: 'L' | 'R' | 'U' | 'D' | 'B' | 'M') {
         this.followPaused = false;
         if (inputKey === 'M') {
-            this.historyRaw.append('M');
             this.toggleMarkerAt(this.player.x, this.player.y);
             return;
         }
 
         if (inputKey === 'B') {
-            this.historyRaw.append('B');
             if (this.history.length() === 0) return;
             const last = this.history.lastChar();
             let dx = 0, dy = 0;
@@ -516,8 +543,6 @@ export class Game {
 
         this.player.x = nx;
         this.player.y = ny;
-
-        this.historyRaw.append(inputKey);
 
         const last = this.history.lastChar();
         const isUndo =
@@ -765,7 +790,7 @@ export class Game {
 
     private hardReset() {
         this.level = 0;
-        this.saveLevel(this.level);
+        this.save?.setLevel(this.level);
         this.initLevel();
     }
 
@@ -780,70 +805,4 @@ export class Game {
         if (this.markers.delete(k)) this.needsRender = true;
     }
 
-    private saveLevel(level: number) {
-        try {
-            localStorage.setItem('idle-laby-level', String(level));
-        } catch {
-        }
-    }
-
-    private loadLevel(): number | null {
-        try {
-            const v = localStorage.getItem('idle-laby-level');
-            if (v == null) return null;
-            const n = Number(v);
-            return Number.isFinite(n) && n >= 0 ? n : null;
-        } catch {
-            return null;
-        }
-    }
-
-    // Speichert historyRaw throttled (>=3s Abstand) oder erzwungen sofort
-    private saveHistoryRaw(force = false) {
-        try {
-            const now = performance.now();
-            if (!force) {
-                if (this.historyRaw.length() === this.lastSavedHistoryLen) return;
-                if (now - this.lastHistorySaveAt < 3000) return;
-            }
-            if (this.historyRaw.length() > 2000000) {
-                console.log("Game: Reduce History: " + this.historyRaw.length() + " -> " + this.history.length());
-                this.historyRaw = new StringBuilder();
-                this.historyRaw.append(this.history.toString());
-            }
-            //console.log("Game: Save History: " + this.historyRaw.length);
-            localStorage.setItem('idle-laby-historyRaw', this.historyRaw.toString());
-            this.lastSavedHistoryLen = this.historyRaw.length();
-            this.lastHistorySaveAt = now;
-        } catch {
-        }
-    }
-
-    // Lädt ggf. gespeicherte historyRaw und spielt sie mittels updatePlayer() ab
-    private loadHistoryRawAndReplay() {
-        try {
-            const raw = localStorage.getItem('idle-laby-historyRaw');
-            if (!raw) return;
-            for (let i = 0; i < raw.length; i++) {
-                const c = raw.charAt(i);
-                if (c === 'L' || c === 'R' || c === 'U' || c === 'D' || c === 'B' || c === 'M') {
-                    this.updatePlayer(c);
-                }
-            }
-            // Nach Replay Kamera auf Spieler zentrieren, Render anstoßen
-            this.camera.centerOnPlayerTile(this.player.x, this.player.y);
-            this.followPaused = false;
-            this.needsRender = true;
-        } catch {
-        }
-    }
-
-    private isLocalhost(): boolean {
-        try {
-            const h = window.location.hostname;
-            return h === 'localhost' || h === '127.0.0.1' || h === '::1';
-        } catch {
-            return false;
-        }
-    }
 }
