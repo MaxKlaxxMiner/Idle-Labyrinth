@@ -32,10 +32,6 @@ export class Game {
     private fpsLastTime = performance.now();
     private fpsValue = 0;
 
-    // Rendermodus
-    private turbo = false; // false=VSync (RAF), true=Turbo (ohne VSync)
-    private fastTimer: number | null = null;
-
     private camera = new Camera();
     private showGrid = true;
 
@@ -45,7 +41,6 @@ export class Game {
     private player = {x: 1, y: 1, r: 0.35};
     private goal = {x: 0, y: 0};
     private moves = 0;
-    private resetLatch = false;
     private history = new StringBuilder();
     private markers = new Set<number>();
     private randomWalkHeld = false;
@@ -115,37 +110,9 @@ export class Game {
     }
 
     start() {
-        if (this.rafId != null || this.fastTimer != null) return;
-        if (this.turbo) this.startTurboLoop(); else this.startRafLoop();
-    }
-
-    stop() {
-        if (this.rafId != null) cancelAnimationFrame(this.rafId);
-        this.rafId = null;
-        if (this.fastTimer != null) {
-            clearTimeout(this.fastTimer);
-            clearInterval(this.fastTimer);
-        }
-        this.fastTimer = null;
-    }
-
-    // Alle Ressourcen und DOM-Bindings sauber abräumen.
-    dispose() {
-        this.stop();
-        window.removeEventListener('resize', this.onResize);
-        this.bgCanvas.removeEventListener('mousedown', this.onMouseDown);
-        window.removeEventListener('mousemove', this.onMouseMove);
-        window.removeEventListener('mouseup', this.onMouseUp);
-        this.bgCanvas.removeEventListener('wheel', this.onWheel);
-        this.input.dispose();
-        // FG-Canvas wurde im Constructor selbst angelegt -> wieder entfernen
-        if (this.canvas.parentElement) this.canvas.parentElement.removeChild(this.canvas);
-    }
-
-    private startRafLoop() {
+        if (this.rafId != null) return;
         const loop = () => {
             this.update();
-            // VSync-Modus: nur rendern, wenn invalidiert
             if (this.needsRender) {
                 this.render();
                 this.needsRender = false;
@@ -164,26 +131,22 @@ export class Game {
         this.rafId = requestAnimationFrame(loop);
     }
 
-    private startTurboLoop() {
-        const loop = () => {
-            // Burst-Rendering bis mindestens 10 ms vergangen sind (Speed-Test)
-            const minTime = performance.now() + 10;
-            do {
-                this.update();
-                this.render();
-                this.fpsFrames++;
-            } while (performance.now() < minTime);
-            const now = performance.now();
-            const dt = now - this.fpsLastTime;
-            if (dt >= 1000) {
-                this.fpsValue = Math.round((this.fpsFrames * 1000) / dt);
-                this.fpsFrames = 0;
-                this.fpsLastTime = now;
-                this.updateHud();
-            }
-        };
-        this.fastTimer = window.setInterval(loop, 0);
-        loop();
+    stop() {
+        if (this.rafId != null) cancelAnimationFrame(this.rafId);
+        this.rafId = null;
+    }
+
+    // Alle Ressourcen und DOM-Bindings sauber abräumen.
+    dispose() {
+        this.stop();
+        window.removeEventListener('resize', this.onResize);
+        this.bgCanvas.removeEventListener('mousedown', this.onMouseDown);
+        window.removeEventListener('mousemove', this.onMouseMove);
+        window.removeEventListener('mouseup', this.onMouseUp);
+        this.bgCanvas.removeEventListener('wheel', this.onWheel);
+        this.input.dispose();
+        // FG-Canvas wurde im Constructor selbst angelegt -> wieder entfernen
+        if (this.canvas.parentElement) this.canvas.parentElement.removeChild(this.canvas);
     }
 
     private update() {
@@ -218,9 +181,8 @@ export class Game {
             const stepKey = this.input.consumeStepKey();
             if (stepKey) {
                 this.updatePlayer(stepKey);
-            } else {
-                this.handleRandomWalk();
             }
+            // M-Taste (handleRandomWalk) ist aktuell deaktiviert; gehört später zum Bot.
         }
 
         // Kamera-Follow mit Dead-Zone (bei Drag pausieren)
@@ -235,34 +197,12 @@ export class Game {
             this.needsRender = true;
         }
 
-        // Reset/Hardreset per Taste 'R'
-        // Reset-Erkennung: bevorzugt Edge; Fallback bei gehaltenem Key via Latch
-        const resetEdge = this.input.consumeKey('r', 'R');
-        const resetHeld = !this.resetLatch && this.input.isPressed('r', 'R');
-        if (resetEdge || resetHeld) {
-            this.resetLatch = true;
+        // Reset: aktuelles Level neu starten. Kein Hard-Reset mehr per Taste (geht nur über Hauptmenü).
+        if (this.input.consumeKey('r', 'R')) {
             const atStart = this.player.x === 1 && this.player.y === 1;
-            if (!atStart) {
-                if (confirm('Level zurücksetzen und zum Start zurückkehren?')) {
-                    this.initLevel();
-                }
-            } else {
-                if (confirm('HARDRESET: gesamtes Spiel zurücksetzen (Level 1) ?')) {
-                    this.hardReset();
-                }
+            if (!atStart && confirm('Level zurücksetzen und zum Start zurückkehren?')) {
+                this.initLevel();
             }
-        }
-        if (!this.input.isPressed('r', 'R')) this.resetLatch = false;
-
-        // Turbo (ohne VSync) umschalten per Taste 'T'
-        if (this.input.consumeKey('t', 'T')) {
-            this.turbo = !this.turbo;
-            // sanfter Loop-Wechsel
-            setTimeout(() => {
-                this.stop();
-                this.start();
-            }, 0);
-            this.updateHud();
         }
 
         if (this.input.consumeKey('g', 'G')) {
@@ -336,8 +276,7 @@ export class Game {
 
     private updateHud() {
         const {tileSize} = this.camera.getOffsets();
-        const mode = this.turbo ? 'Turbo' : 'VSync';
-        this.hud.set({level: this.level + 1, moves: this.moves, tileSize, mode: mode as ('Turbo' | 'VSync'), fps: this.fpsValue});
+        this.hud.set({level: this.level + 1, moves: this.moves, tileSize, fps: this.fpsValue});
     }
 
     private onResize() {
@@ -564,12 +503,9 @@ export class Game {
             this.levelView.markCell(nx, ny, 'trail');
             this.history.append(inputKey);
             this.moves += 1;
-            if (ny === 1 || nx === this.laby.pixWidth - 2) {
-                this.fillTR();
-            }
-            if (nx === 1 || ny === this.laby.pixHeight - 2) {
-                this.fillBL();
-            }
+            // fillTR/fillBL sind aktuell deaktiviert (gehören später zum Bot).
+            // if (ny === 1 || nx === this.laby.pixWidth - 2) this.fillTR();
+            // if (nx === 1 || ny === this.laby.pixHeight - 2) this.fillBL();
         }
         this.autoClearMarkerAt(this.player.x, this.player.y);
         this.needsRender = true;
@@ -786,12 +722,6 @@ export class Game {
         // --- Rest: zufällige Wahl ---
         const index = Math.floor(Math.random() * valid.length);
         return valid[index];
-    }
-
-    private hardReset() {
-        this.level = 0;
-        this.save?.setLevel(this.level);
-        this.initLevel();
     }
 
     private toggleMarkerAt(x: number, y: number) {
