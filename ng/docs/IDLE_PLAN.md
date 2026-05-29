@@ -17,9 +17,12 @@ Grober Umriss für die Weiterentwicklung vom rein manuellen Labyrinth-Spiel zum 
    - Reiner Handmodus ohne Idle-Features.
    - Levelschritte folgen `Consts.largeLevels` (also größere Sprünge), nicht inkrementell.
    - Kein Coin-Verdienst, getrennter Save-Slot oder klar markiert als „nur Hand".
-3. **Debug** (nur localhost)
+3. **Debug** (nur localhost, automatisch erkannt)
    - Alles aus Story + direkte Levelwahl, freie Upgrade-Schaltung, vermutlich auch alle bisherigen Scan-/Cheat-Tools.
    - Bestehende „Cheat"-/Scan-Tools wandern aus Story in diesen Modus.
+   - **Cheats-Panel:** Button links oben (z. B. „🛠 Cheats") öffnet ein Overlay mit allen Stellschrauben: Level direkt setzen, Coins frei eintragen, jedes Upgrade einzeln an-/abschalten oder Stufe wählen, Bot-Logik forcen, Speed-Slider.
+   - **Timewarp:** Slider/Tasten ×0.5 / ×1 / ×2 / ×5 / ×20 für Spielgeschwindigkeit (RAF-Tick-Multiplikator). Hauptzweck: Balancing-Tests, sehen wie sich gekaufte Upgrades über längere Zeit auswirken, ohne minutenlang zuzuschauen.
+   - **Test-Workflows direkt im Panel:** „1000 Coins +", „Alle Upgrades freischalten", „Bot starten", „Spielzeit überspringen". Stub-Buttons für wiederkehrende Test-Szenarien.
 
 ## Coin-Ökonomie
 
@@ -124,9 +127,21 @@ Migration aus `idle-laby-level` und `idle-laby-historyRaw` muss beim ersten Star
 13. **Ratten-Erweiterungen:** Anzahl, Speed, Teleporter, Borderline.
 14. **Drohnen (optional):** sobald die anderen Schichten stabil laufen.
 
+## Soft-Schutz / GitHub-Stern-Easter-Egg
+
+Status: Idee/Konzept, später umzusetzen. Da das Spiel Opensource ist und client-seitig läuft, gibt es keinen echten Cheat-Schutz - alles ist „security by friendliness".
+
+- HMAC-Signatur an alle wichtigen Save-Felder (coins, upgrades, level, bestStats). Schlüssel = `BASE_SECRET` plus `location.hostname`, sodass Saves nur auf der Original-Domain valide sind.
+- Friendly-Hosts-Whitelist akzeptiert die produktive Domain (idle-laby.itch.io etc.) und localhost.
+- **Auf der Original-Domain:** wird ein manipulierter Save erkannt, freundlicher Hinweis: „Save wurde verändert. Wenn du cheaten möchtest: clone das Repo und lass es lokal laufen - dann meckere ich nicht mehr. Ein ⭐ auf GitHub freut mich trotzdem."
+- **Auf `localhost`:** Cheats sind explizit erlaubt (Debug-Modus aktiv), dezenter Banner: „Localhost-Modus erkannt. Cheats welcome - wenn dir das Spiel gefällt, gib dem Repo ein ⭐ auf GitHub."
+- **Auf unbekannter Domain (Fork):** Save wird als „forked instance" markiert, Hinweis: „Forked: gegen Original verglichen wirst du hier nicht zählen. Original: github.com/maxklaxx/idle-labyrinth"
+- Wichtig: kein Lockout des Spielers. Manipulierte Saves werden weiterhin geladen, aber als `legitimate: false` markiert. Stats zeigen diesen Marker, sonst nichts.
+- Itch.io-Hosting nutzt CDN-Subdomains (z. B. `html-classic.itch.zone`); die müssen mit in die Whitelist.
+
 ## Offene Punkte
 
-- Konkreter `factor` für Coin-Belohnung und Balancing der Upgrade-Kosten (erst nach erster Spielbarkeit kalibrierbar).
+- Konkreter `factor` für Coin-Belohnung und Balancing der Upgrade-Kosten (erst nach erster Spielbarkeit kalibrierbar). Cheats-Panel im Debug-Modus dient als primäres Tuning-Tool: Upgrades direkt setzen und sehen, ob die Stufensprünge spürbar aber nicht overpowered sind.
 - Genaue Hotkey-Belegung (aktuell sind viele Buchstaben/Sondertasten schon belegt – T, R, G, Space, Enter, +/-/0).
 - UI-Konzept für den Shop (Modal, Sidebar, Overlay?). Aktuelles HUD ist sehr kompakt.
 - Verhalten beim Reset (R): Coins behalten? Wiederholungs-Decay beim Hard-Reset?

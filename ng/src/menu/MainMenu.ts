@@ -145,7 +145,7 @@ export class MainMenu {
                     <button class="menu-btn" data-act="idle">Idle Mode</button>
                     <button class="menu-btn" data-act="endless">Endless Mode</button>
                     <button class="menu-btn" data-act="stats">Stats</button>
-                    <button class="menu-btn menu-btn-danger" data-act="hard-reset">Hard Reset</button>
+                    <button class="menu-btn menu-btn-danger" data-act="hard-reset">Reset Idle</button>
                 </div>
             </div>
         `;

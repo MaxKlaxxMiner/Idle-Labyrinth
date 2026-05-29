@@ -1,10 +1,13 @@
 /**
  * Persistenter Spielstand pro Slot (z. B. 'idle', 'endless'), backed by IndexedDB.
  *
- * Stores:
+ * Stores (DB v3):
  * - state:      { save: { level: number } }              - aktueller Level-Stand
  * - histories:  { [level: number]: string }              - pro Level die Eingabespur (Endless)
  * - best:       { [level: number]: { moves, totalMoves } } - Bestwerte pro gelöstem Level
+ * - meta:       { coins: number }                        - Coin-Wallet (Idle)
+ * - upgrades:   { [upgradeId: string]: number }          - gekaufte Upgrade-Stufen (Idle)
+ * - clears:     { [level: number]: number }              - Wiederholungs-Zähler pro Level (Idle)
  *
  * Alle Daten werden bei init() in den RAM geladen; Lese-Ops sind synchron,
  * Schreib-Ops aktualisieren RAM sofort und persistieren asynchron im Hintergrund.
@@ -16,11 +19,15 @@ export interface BestStat {
 }
 
 export class GameSave {
-    private static readonly DB_VERSION = 2;
+    private static readonly DB_VERSION = 3;
     private static readonly STORE_STATE = 'state';
     private static readonly STORE_HISTORIES = 'histories';
     private static readonly STORE_BEST = 'best';
+    private static readonly STORE_META = 'meta';
+    private static readonly STORE_UPGRADES = 'upgrades';
+    private static readonly STORE_CLEARS = 'clears';
     private static readonly KEY_STATE = 'save';
+    private static readonly KEY_META = 'meta';
 
     private readonly dbName: string;
     private dbPromise: Promise<IDBDatabase> | null = null;
@@ -28,56 +35,74 @@ export class GameSave {
     private level = 0;
     private histories = new Map<number, string>();
     private bests = new Map<number, BestStat>();
+    private coins = 0;
+    private upgrades = new Map<string, number>();
+    private clears = new Map<number, number>();
 
     constructor(slot: string) {
         this.dbName = `idle-laby-save-${slot}`;
     }
 
-    /** Einmalige Initialisierung: lädt vorhandenen State + alle Historien + Bestwerte in den RAM. */
+    /** Einmalige Initialisierung: lädt alles in den RAM. */
     async init(): Promise<void> {
         const idb = GameSave.getIndexedDB();
         if (!idb) return;
         try {
             const db = await this.openDB(idb);
-            const tx = db.transaction([GameSave.STORE_STATE, GameSave.STORE_HISTORIES, GameSave.STORE_BEST], 'readonly');
-            const state = tx.objectStore(GameSave.STORE_STATE);
-            const histories = tx.objectStore(GameSave.STORE_HISTORIES);
-            const best = tx.objectStore(GameSave.STORE_BEST);
+            const stores = [
+                GameSave.STORE_STATE, GameSave.STORE_HISTORIES, GameSave.STORE_BEST,
+                GameSave.STORE_META, GameSave.STORE_UPGRADES, GameSave.STORE_CLEARS,
+            ];
+            const tx = db.transaction(stores, 'readonly');
 
-            const stateRec = await GameSave.reqToPromise<any>(state.get(GameSave.KEY_STATE));
+            // state -> level
+            const stateRec = await GameSave.reqToPromise<any>(
+                tx.objectStore(GameSave.STORE_STATE).get(GameSave.KEY_STATE),
+            );
             if (stateRec && Number.isFinite(stateRec.level) && stateRec.level >= 0) {
                 this.level = stateRec.level >>> 0;
             }
 
-            // Histories laden (Cursor)
-            await new Promise<void>((resolve, reject) => {
-                const req = histories.openCursor();
-                req.onerror = () => reject(req.error);
-                req.onsuccess = () => {
-                    const cur = req.result;
-                    if (!cur) { resolve(); return; }
-                    const key = Number(cur.key);
-                    if (Number.isFinite(key) && typeof cur.value === 'string') {
-                        this.histories.set(key, cur.value);
-                    }
-                    cur.continue();
-                };
+            // meta -> coins
+            const metaRec = await GameSave.reqToPromise<any>(
+                tx.objectStore(GameSave.STORE_META).get(GameSave.KEY_META),
+            );
+            if (metaRec && Number.isFinite(metaRec.coins) && metaRec.coins >= 0) {
+                this.coins = metaRec.coins >>> 0;
+            }
+
+            // histories: Map<level, string>
+            await GameSave.cursorEach(tx.objectStore(GameSave.STORE_HISTORIES), (key, value) => {
+                const k = Number(key);
+                if (Number.isFinite(k) && typeof value === 'string') {
+                    this.histories.set(k, value);
+                }
             });
 
-            // Best-Stats laden (Cursor)
-            await new Promise<void>((resolve, reject) => {
-                const req = best.openCursor();
-                req.onerror = () => reject(req.error);
-                req.onsuccess = () => {
-                    const cur = req.result;
-                    if (!cur) { resolve(); return; }
-                    const key = Number(cur.key);
-                    const v = cur.value;
-                    if (Number.isFinite(key) && v && Number.isFinite(v.moves) && Number.isFinite(v.totalMoves)) {
-                        this.bests.set(key, {moves: v.moves >>> 0, totalMoves: v.totalMoves >>> 0});
-                    }
-                    cur.continue();
-                };
+            // best: Map<level, BestStat>
+            await GameSave.cursorEach(tx.objectStore(GameSave.STORE_BEST), (key, value) => {
+                const k = Number(key);
+                if (Number.isFinite(k) && value && Number.isFinite(value.moves) && Number.isFinite(value.totalMoves)) {
+                    this.bests.set(k, {moves: value.moves >>> 0, totalMoves: value.totalMoves >>> 0});
+                }
+            });
+
+            // upgrades: Map<upgradeId, level>
+            await GameSave.cursorEach(tx.objectStore(GameSave.STORE_UPGRADES), (key, value) => {
+                const k = String(key);
+                const n = Number(value);
+                if (k && Number.isFinite(n) && n >= 0) {
+                    this.upgrades.set(k, n >>> 0);
+                }
+            });
+
+            // clears: Map<level, count>
+            await GameSave.cursorEach(tx.objectStore(GameSave.STORE_CLEARS), (key, value) => {
+                const k = Number(key);
+                const n = Number(value);
+                if (Number.isFinite(k) && Number.isFinite(n) && n >= 0) {
+                    this.clears.set(k, n >>> 0);
+                }
             });
 
             await GameSave.txDone(tx);
@@ -85,6 +110,8 @@ export class GameSave {
             // Cache bleibt leer / unvollständig
         }
     }
+
+    // ----- Level (current) -----
 
     getLevel(): number {
         return this.level;
@@ -98,6 +125,8 @@ export class GameSave {
         void this.persistState();
     }
 
+    // ----- History (Endless) -----
+
     getHistory(level: number): string {
         return this.histories.get(level >>> 0) ?? '';
     }
@@ -107,19 +136,20 @@ export class GameSave {
         if (raw.length === 0) {
             if (!this.histories.has(key)) return;
             this.histories.delete(key);
-            void this.persistHistory(key, null);
+            void this.persistKV(GameSave.STORE_HISTORIES, key, null);
         } else {
             if (this.histories.get(key) === raw) return;
             this.histories.set(key, raw);
-            void this.persistHistory(key, raw);
+            void this.persistKV(GameSave.STORE_HISTORIES, key, raw);
         }
     }
+
+    // ----- Best-Stats (Endless) -----
 
     getBest(level: number): BestStat | null {
         return this.bests.get(level >>> 0) ?? null;
     }
 
-    /** Liefert alle bekannten Bestwerte, aufsteigend nach Level sortiert. */
     listBests(): Array<{level: number; moves: number; totalMoves: number}> {
         const out: Array<{level: number; moves: number; totalMoves: number}> = [];
         for (const [level, best] of this.bests) {
@@ -140,8 +170,70 @@ export class GameSave {
             : {moves: m, totalMoves: t};
         if (existing && next.moves === existing.moves && next.totalMoves === existing.totalMoves) return;
         this.bests.set(key, next);
-        void this.persistBest(key, next);
+        void this.persistKV(GameSave.STORE_BEST, key, {moves: next.moves, totalMoves: next.totalMoves});
     }
+
+    // ----- Coins (Idle) -----
+
+    getCoins(): number {
+        return this.coins;
+    }
+
+    setCoins(value: number): void {
+        if (!Number.isFinite(value) || value < 0) return;
+        const next = value >>> 0;
+        if (next === this.coins) return;
+        this.coins = next;
+        void this.persistMeta();
+    }
+
+    addCoins(delta: number): void {
+        if (!Number.isFinite(delta) || delta === 0) return;
+        this.setCoins(Math.max(0, this.coins + Math.floor(delta)));
+    }
+
+    // ----- Upgrades (Idle) -----
+
+    getUpgrade(id: string): number {
+        return this.upgrades.get(id) ?? 0;
+    }
+
+    setUpgrade(id: string, level: number): void {
+        if (!id || !Number.isFinite(level) || level < 0) return;
+        const next = level >>> 0;
+        const current = this.upgrades.get(id) ?? 0;
+        if (next === current) return;
+        if (next === 0) {
+            this.upgrades.delete(id);
+            void this.persistKV(GameSave.STORE_UPGRADES, id, null);
+        } else {
+            this.upgrades.set(id, next);
+            void this.persistKV(GameSave.STORE_UPGRADES, id, next);
+        }
+    }
+
+    listUpgrades(): Array<{id: string; level: number}> {
+        const out: Array<{id: string; level: number}> = [];
+        for (const [id, level] of this.upgrades) out.push({id, level});
+        return out;
+    }
+
+    // ----- Level-Clears (Idle Wiederholungszähler) -----
+
+    getLevelClears(level: number): number {
+        return this.clears.get(level >>> 0) ?? 0;
+    }
+
+    /** Erhöht den Wiederholungszähler für ein Level und gibt den neuen Wert zurück. */
+    incrementLevelClears(level: number): number {
+        const key = level >>> 0;
+        const next = (this.clears.get(key) ?? 0) + 1;
+        this.clears.set(key, next);
+        void this.persistKV(GameSave.STORE_CLEARS, key, next);
+        return next;
+    }
+
+    // ----- Persistenz -----
 
     private async persistState(): Promise<void> {
         const idb = GameSave.getIndexedDB();
@@ -151,37 +243,32 @@ export class GameSave {
             const tx = db.transaction([GameSave.STORE_STATE], 'readwrite');
             tx.objectStore(GameSave.STORE_STATE).put({level: this.level}, GameSave.KEY_STATE);
             await GameSave.txDone(tx);
-        } catch {
-            // ignorieren
-        }
+        } catch { /* ignorieren */ }
     }
 
-    private async persistHistory(level: number, raw: string | null): Promise<void> {
+    private async persistMeta(): Promise<void> {
         const idb = GameSave.getIndexedDB();
         if (!idb) return;
         try {
             const db = await this.openDB(idb);
-            const tx = db.transaction([GameSave.STORE_HISTORIES], 'readwrite');
-            const store = tx.objectStore(GameSave.STORE_HISTORIES);
-            if (raw === null) store.delete(level);
-            else store.put(raw, level);
+            const tx = db.transaction([GameSave.STORE_META], 'readwrite');
+            tx.objectStore(GameSave.STORE_META).put({coins: this.coins}, GameSave.KEY_META);
             await GameSave.txDone(tx);
-        } catch {
-            // ignorieren
-        }
+        } catch { /* ignorieren */ }
     }
 
-    private async persistBest(level: number, best: BestStat): Promise<void> {
+    /** Generischer K/V-Schreiber für die Map-Stores. value=null löscht den Eintrag. */
+    private async persistKV(store: string, key: IDBValidKey, value: any | null): Promise<void> {
         const idb = GameSave.getIndexedDB();
         if (!idb) return;
         try {
             const db = await this.openDB(idb);
-            const tx = db.transaction([GameSave.STORE_BEST], 'readwrite');
-            tx.objectStore(GameSave.STORE_BEST).put({moves: best.moves, totalMoves: best.totalMoves}, level);
+            const tx = db.transaction([store], 'readwrite');
+            const os = tx.objectStore(store);
+            if (value === null) os.delete(key);
+            else os.put(value, key);
             await GameSave.txDone(tx);
-        } catch {
-            // ignorieren
-        }
+        } catch { /* ignorieren */ }
     }
 
     private openDB(idb: IDBFactory): Promise<IDBDatabase> {
@@ -194,6 +281,9 @@ export class GameSave {
                 if (!db.objectStoreNames.contains(GameSave.STORE_STATE)) db.createObjectStore(GameSave.STORE_STATE);
                 if (!db.objectStoreNames.contains(GameSave.STORE_HISTORIES)) db.createObjectStore(GameSave.STORE_HISTORIES);
                 if (!db.objectStoreNames.contains(GameSave.STORE_BEST)) db.createObjectStore(GameSave.STORE_BEST);
+                if (!db.objectStoreNames.contains(GameSave.STORE_META)) db.createObjectStore(GameSave.STORE_META);
+                if (!db.objectStoreNames.contains(GameSave.STORE_UPGRADES)) db.createObjectStore(GameSave.STORE_UPGRADES);
+                if (!db.objectStoreNames.contains(GameSave.STORE_CLEARS)) db.createObjectStore(GameSave.STORE_CLEARS);
             };
             req.onsuccess = () => resolve(req.result);
             req.onerror = () => reject(req.error);
@@ -224,6 +314,20 @@ export class GameSave {
             tx.oncomplete = () => resolve();
             tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
             tx.onerror = () => reject(tx.error);
+        });
+    }
+
+    /** Iteriert per Cursor über einen ObjectStore und ruft cb(key, value) auf. */
+    private static cursorEach(store: IDBObjectStore, cb: (key: IDBValidKey, value: any) => void): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            const req = store.openCursor();
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => {
+                const cur = req.result;
+                if (!cur) { resolve(); return; }
+                cb(cur.key, cur.value);
+                cur.continue();
+            };
         });
     }
 }

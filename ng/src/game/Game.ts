@@ -7,6 +7,13 @@ import {HUDView} from '@/ui/HUDView';
 import {StringBuilder} from "@/lib/StringBuilder";
 import {LabyCache} from "@/lib/LabyCache";
 import {GameSave} from "@/lib/GameSave";
+import {Bot, BotHost} from './Bot';
+import {GameModeStrategy, ModeHost} from './modes/GameMode';
+import {IdleMode} from './modes/IdleMode';
+import {EndlessMode} from './modes/EndlessMode';
+import {calculateLevelReward} from '@/idle/Coins';
+import {ShopView, ShopHost} from '@/idle/ShopView';
+import {UpgradeId} from '@/idle/Upgrades';
 
 export type GameMode = 'idle' | 'endless';
 
@@ -24,15 +31,20 @@ export interface GameOptions {
     replayLevel?: number;
 }
 
-export class Game {
+function buildModeStrategy(mode: GameMode): GameModeStrategy {
+    return mode === 'endless' ? new EndlessMode() : new IdleMode();
+}
+
+export class Game implements BotHost, ModeHost, ShopHost {
     private bgCanvas: HTMLCanvasElement;
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
     private hud!: HUDView;
     private rafId: number | null = null;
     private disposed = false;
-    private laby!: Laby;
-    private levelView!: Level;
+    // BotHost erwartet die Felder als readonly, intern werden sie bei initLevel neu zugewiesen.
+    laby!: Laby;
+    levelView!: Level;
 
     private needsRender = true;
 
@@ -40,24 +52,17 @@ export class Game {
     private showGrid = true;
 
     // Eingabe und Spielerzustand
-    private input = new Input();
-    private level = 0; // gameLevel beginnt bei 0
-    private player = {x: 1, y: 1, r: 0.35};
-    private goal = {x: 0, y: 0};
-    private moves = 0;       // "echte" Pfadlänge: zählt bei Undo wieder runter
-    private totalMoves = 0;  // Gesamtschritte inkl. Rückwärts und Marker, nur aufwärts
-    private history = new StringBuilder();
+    readonly input = new Input();
+    level = 0; // gameLevel beginnt bei 0
+    readonly player = {x: 1, y: 1, r: 0.35};
+    readonly goal = {x: 0, y: 0};
+    moves = 0;       // "echte" Pfadlänge: zählt bei Undo wieder runter
+    totalMoves = 0;  // Gesamtschritte inkl. Rückwärts und Marker, nur aufwärts
+    history = new StringBuilder();
     private historyRaw = new StringBuilder();   // wird nur im Endless-Modus benutzt (persistiert pro Level)
     private replaying = false;                  // aktiv während des Replays beim Level-Start (keine Persistierung)
     private lastHistorySaveAt = 0;              // Throttle-Zeitstempel für historyRaw-Persistenz
     private markers = new Set<number>();
-    private randomWalkHeld = false;
-    private randomWalkRepeat = false;
-    private randomWalkDelayUntil = 0;
-    private randomWalkHoldStart = 0;
-    private randomWalkMulti = 1;
-    private lastFillX = 0;
-    private lastFillY = 0;
 
     // Mouse-drag Panning (temporär, Kamera folgt erst nach Bewegung wieder)
     private dragging = false;
@@ -69,18 +74,53 @@ export class Game {
     private followPaused = false;
 
     private readonly cache: LabyCache | null;
-    private readonly save: GameSave | null;
-    private readonly mode: GameMode;
+    readonly save: GameSave | null;
+    private readonly modeStrategy!: GameModeStrategy;
     private readonly onExit: (() => void) | null;
     private replayMode = false;
+    private readonly bot!: Bot;
+    private readonly shop!: ShopView | null;
+    private botActive = false;
+
+    // ModeHost-API
+    getHistoryRaw(): string {
+        return this.historyRaw.toString();
+    }
+
+    // ShopHost-API
+    getCoins(): number {
+        return this.save?.getCoins() ?? 0;
+    }
+
+    getUpgradeLevel(id: UpgradeId): number {
+        return this.save?.getUpgrade(id) ?? 0;
+    }
+
+    purchase(id: UpgradeId, newLevel: number, cost: number): void {
+        if (!this.save) return;
+        if (this.save.getCoins() < cost) return;
+        this.save.addCoins(-cost);
+        this.save.setUpgrade(id, newLevel);
+        this.updateHud();
+    }
+
+    // BotHost-API: steuert, ob bot.tick() den Spieler bewegt.
+    isBotActive(): boolean {
+        return this.botActive;
+    }
+
+    private isAutoMoverAvailable(): boolean {
+        return this.modeStrategy.id === 'idle' && (this.save?.getUpgrade('automover-random') ?? 0) >= 1;
+    }
 
     constructor(canvas: HTMLCanvasElement, opts?: GameOptions) {
         this.bgCanvas = canvas;
         this.cache = opts?.cache ?? null;
         this.save = opts?.save ?? null;
-        this.mode = opts?.mode ?? 'idle';
+        this.modeStrategy = buildModeStrategy(opts?.mode ?? 'idle');
         this.onExit = opts?.onExit ?? null;
         this.replayMode = typeof opts?.replayLevel === 'number';
+        this.bot = new Bot(this);
 
         const fg = document.createElement('canvas');
         fg.id = 'game-fg';
@@ -97,6 +137,11 @@ export class Game {
         this.hud = new HUDView(document.getElementById('hud') as HTMLElement | null);
         this.levelView = new Level(this.bgCanvas);
         this.levelView.setShowGrid(this.showGrid);
+        // Shop nur im Idle-Modus; im Endless gibt es keine Coin-Oekonomie.
+        const shopParent = this.bgCanvas.parentElement;
+        this.shop = (this.modeStrategy.id === 'idle' && shopParent)
+            ? new ShopView(shopParent, this)
+            : null;
 
         // Replay: explizit angefordertes Level; sonst zuletzt erreichtes Level aus dem Save.
         if (typeof opts?.replayLevel === 'number' && opts.replayLevel >= 0) {
@@ -161,14 +206,22 @@ export class Game {
         this.input.dispose();
         // FG-Canvas wurde im Constructor selbst angelegt -> wieder entfernen
         if (this.canvas.parentElement) this.canvas.parentElement.removeChild(this.canvas);
+        this.shop?.dispose();
     }
 
     private update() {
-        // ESC -> zurück zum Hauptmenü
+        // ESC -> Shop schließen falls offen, sonst zurück zum Hauptmenü
         if (this.input.consumeKey('Escape')) {
+            if (this.shop?.isOpen()) {
+                this.shop.close();
+                return;
+            }
             this.onExit?.();
             return;
         }
+
+        // Bei offenem Shop pausiert die Spiellogik (keine Bewegung/Zoom/Bot etc.).
+        if (this.shop?.isOpen()) return;
 
         // Zoom-Steuerung (über Camera)
         let zoomChanged = false;
@@ -184,8 +237,18 @@ export class Game {
         }
         if (zoomChanged) this.needsRender = true;
 
-        // Marker an aktueller Position toggeln (Leertaste)
-        if (this.input.consumeKey(' ', 'Space')) this.updatePlayer('M');
+        // Leertaste: im Endless setzt sie einen Marker, im Idle toggelt sie den AutoMover-Bot.
+        if (this.input.consumeKey(' ', 'Space')) {
+            if (this.modeStrategy.id === 'idle') {
+                if (this.isAutoMoverAvailable()) {
+                    this.botActive = !this.botActive;
+                    this.updateHud();
+                }
+                // Ohne gekauften Bot bleibt Space im Idle wirkungslos (keine Marker).
+            } else {
+                this.updatePlayer('M');
+            }
+        }
 
         // Undo: Backspace/Delete -> genau einen Schritt zurück (Autorepeat durch Keydown-Repeat)
         if (this.input.consumeKey('Backspace', 'Delete')) {
@@ -196,7 +259,8 @@ export class Game {
             if (stepKey) {
                 this.updatePlayer(stepKey);
             }
-            // M-Taste (handleRandomWalk) ist aktuell deaktiviert; gehört später zum Bot.
+            // Bot-Hook: aktuell no-op, wird bei Idle-Bot-Aktivierung relevant.
+            this.bot.tick();
         }
 
         // Kamera-Follow mit Dead-Zone (bei Drag pausieren)
@@ -216,7 +280,7 @@ export class Game {
             const atStart = this.player.x === 1 && this.player.y === 1;
             if (!atStart && confirm('Level zurücksetzen und zum Start zurückkehren?')) {
                 // Endless: gespeicherten Verlauf für dieses Level verwerfen
-                if (this.mode === 'endless') this.save?.setHistory(this.level, '');
+                if (this.modeStrategy.usesHistory()) this.save?.setHistory(this.level, '');
                 this.initLevel();
             }
         }
@@ -229,7 +293,7 @@ export class Game {
 
         // Ziel erreicht?
         if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
-            this.onLevelSolved();
+            this.modeStrategy.onLevelSolved(this);
             if (this.replayMode) {
                 // Replay: zurück zum zuletzt erreichten/höchsten Level.
                 // Save bleibt unverändert (kein Aufstieg), nur historyRaw/Best wurden aktualisiert.
@@ -237,11 +301,11 @@ export class Game {
                 const current = this.save?.getLevel() ?? this.level;
                 this.level = Math.max(current, this.level);
             } else {
-                this.level = this.computeNextLevel(this.level);
+                this.level = this.modeStrategy.computeNextLevel(this.level);
                 this.save?.setLevel(this.level);
             }
             this.initLevel();
-        } else if (this.mode === 'endless') {
+        } else if (this.modeStrategy.usesHistory()) {
             // Throttled historyRaw-Persistenz (max 1x pro Sekunde)
             const now = performance.now();
             if (now - this.lastHistorySaveAt >= 1000) {
@@ -251,30 +315,9 @@ export class Game {
         }
     }
 
-    // Wird aufgerufen, wenn der Spieler das aktuelle Level abgeschlossen hat.
-    // Im Endless: Bestwerte aktualisieren, historyRaw so kürzen dass nach dem Replay
-    // beim Wiederöffnen der Spieler genau 1 Schritt vor dem Ziel steht.
-    private onLevelSolved() {
-        if (this.mode !== 'endless' || !this.save) return;
-        this.save.recordBest(this.level, this.moves, this.totalMoves);
-        const raw = this.historyRaw.toString();
-        const trimmed = trimToBeforeLastLrud(raw);
-        this.save.setHistory(this.level, trimmed);
-    }
-
     private persistHistoryNow() {
-        if (this.mode !== 'endless' || !this.save) return;
+        if (!this.modeStrategy.usesHistory() || !this.save) return;
         this.save.setHistory(this.level, this.historyRaw.toString());
-    }
-
-    // Schritt im Modus auf das nächste Level. Idle: +1, Endless: Sprung auf nächste largeLevels-Stufe.
-    private computeNextLevel(current: number): number {
-        if (this.mode === 'endless') {
-            let next = current + 1;
-            while (!Consts.largeLevels.has(next + 1)) next++;
-            return next;
-        }
-        return current + 1;
     }
 
     private render() {
@@ -323,7 +366,33 @@ export class Game {
     }
 
     private updateHud() {
-        this.hud.set({level: this.level + 1, moves: this.moves, totalMoves: this.totalMoves});
+        let coins: number | undefined;
+        let coinsPending: number | undefined;
+        let spaceAction: 'mark' | 'available' | 'active' | undefined;
+        if (this.modeStrategy.id === 'idle') {
+            coins = this.save?.getCoins() ?? 0;
+            const clears = this.save?.getLevelClears(this.level) ?? 0;
+            coinsPending = calculateLevelReward(this.level, clears + 1);
+            if (this.isAutoMoverAvailable()) {
+                spaceAction = this.botActive ? 'active' : 'available';
+            }
+        } else {
+            spaceAction = 'mark';
+        }
+        this.hud.set({
+            level: this.level + 1,
+            moves: this.moves,
+            totalMoves: this.totalMoves,
+            coins,
+            coinsPending,
+            spaceAction,
+        });
+        // Shop-Button erst ab Level 5 (intern 0-basiert: level >= 4) einblenden;
+        // bei offenem Shop den dargestellten Coin-Stand und Verfügbarkeiten aktualisieren.
+        if (this.shop) {
+            this.shop.setEnabled(this.level >= 4);
+            if (this.shop.isOpen()) this.shop.refresh();
+        }
     }
 
     private onResize() {
@@ -414,7 +483,7 @@ export class Game {
         return new Laby(w, h, Consts.labySeedBase + w + h + gameLevel, this.cache);
     }
 
-    private canStepTo(cx: number, cy: number, nx: number, ny: number): boolean {
+    canStepTo(cx: number, cy: number, nx: number, ny: number): boolean {
         if (nx < 1 || ny < 1 || nx >= this.laby.pixWidth - 1 || ny >= this.laby.pixHeight - 1) return false;
         const dx = nx - cx, dy = ny - cy;
         if (!((Math.abs(dx) === 2 && dy === 0) || (Math.abs(dy) === 2 && dx === 0))) return false;
@@ -475,6 +544,7 @@ export class Game {
         this.goal.y = Math.max(1, this.laby.pixHeight - 2);
         this.markers.clear();
         this.levelView.setLaby(this.laby);
+        this.bot.resetForLevel();
 
         // Camera: Weltmaße setzen, Best-Fit und zentrieren
         this.camera.setWorldSize(this.laby.pixWidth, this.laby.pixHeight);
@@ -483,14 +553,14 @@ export class Game {
         this.followPaused = false;
         this.needsRender = true;
 
-        // Endless-Modus: gespeicherten Verlauf für dieses Level einspielen
+        // Endless / History-Modi: gespeicherten Verlauf einspielen
         this.replayHistoryIfAny();
     }
 
     // Spielt einen gespeicherten historyRaw (Endless) Zeichen für Zeichen ab,
     // sodass der Spielzustand exakt wie vor dem letzten Speichern aussieht.
     private replayHistoryIfAny() {
-        if (this.mode !== 'endless' || !this.save) return;
+        if (!this.modeStrategy.usesHistory() || !this.save) return;
         const raw = this.save.getHistory(this.level);
         if (!raw) return;
         this.replaying = true;
@@ -514,7 +584,7 @@ export class Game {
 
     // Verarbeitet Spieler-relevante Eingaben (Rohcodes):
     // 'L','R','U','D' = Bewegungen; 'B' = Backspace/Undo; 'M' = Marker toggle
-    private updatePlayer(inputKey: 'L' | 'R' | 'U' | 'D' | 'B' | 'M') {
+    updatePlayer(inputKey: 'L' | 'R' | 'U' | 'D' | 'B' | 'M') {
         this.followPaused = false;
         if (inputKey === 'M') {
             this.toggleMarkerAt(this.player.x, this.player.y);
@@ -587,233 +657,19 @@ export class Game {
             this.history.append(inputKey);
             this.moves += 1;
             this.totalMoves++;
-            // fillTR/fillBL sind aktuell deaktiviert (gehören später zum Bot).
-            // if (ny === 1 || nx === this.laby.pixWidth - 2) this.fillTR();
-            // if (nx === 1 || ny === this.laby.pixHeight - 2) this.fillBL();
+            // Bot-Hook für Borderline-Filler (aktuell no-op)
+            this.bot.onForwardStep(nx, ny);
         }
         this.recordRawInput(inputKey);
         this.autoClearMarkerAt(this.player.x, this.player.y);
         this.needsRender = true;
     }
 
-    // Hängt einen Roh-Input an die historyRaw (Endless) an, solange nicht repliziert wird.
+    // Hängt einen Roh-Input an die historyRaw an (nur in Modi mit History-Persistierung).
     private recordRawInput(c: 'L' | 'R' | 'U' | 'D' | 'B' | 'M') {
         if (this.replaying) return;
-        if (this.mode !== 'endless') return;
+        if (!this.modeStrategy.usesHistory()) return;
         this.historyRaw.append(c);
-    }
-
-    private fillBL() {
-        if (Math.abs(this.lastFillX - this.player.x) + Math.abs(this.lastFillY - this.player.y) < this.history.length() / 256) return; // skip
-        this.lastFillX = this.player.x;
-        this.lastFillY = this.player.y;
-        const moves = this.history.toString();
-        let px = 1;
-        let py = 1;
-        let pix = 0 | 0;
-        for (let i = 0; i < moves.length; i++) {
-            switch (moves[i]) {
-                case 'L':
-                    pix = this.levelView.getPixel(px, py - 1);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px, py - 1, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px, py - 2, this.levelView.deadendColor32);
-                    }
-                    px -= 2;
-                    pix = this.levelView.getPixel(px, py - 1);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px, py - 1, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px, py - 2, this.levelView.deadendColor32);
-                    }
-                    break;
-                case 'R':
-                    pix = this.levelView.getPixel(px, py + 1);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px, py + 1, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px, py + 2, this.levelView.deadendColor32);
-                    }
-                    px += 2;
-                    pix = this.levelView.getPixel(px, py + 1);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px, py + 1, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px, py + 2, this.levelView.deadendColor32);
-                    }
-                    break;
-                case 'U':
-                    pix = this.levelView.getPixel(px + 1, py);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px + 1, py, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px + 2, py, this.levelView.deadendColor32);
-                    }
-                    py -= 2;
-                    pix = this.levelView.getPixel(px + 1, py);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px + 1, py, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px + 2, py, this.levelView.deadendColor32);
-                    }
-                    break;
-                case 'D':
-                    pix = this.levelView.getPixel(px - 1, py);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px - 1, py, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px - 2, py, this.levelView.deadendColor32);
-                    }
-                    py += 2;
-                    pix = this.levelView.getPixel(px - 1, py);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px - 1, py, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px - 2, py, this.levelView.deadendColor32);
-                    }
-                    break;
-            }
-        }
-    }
-
-    private fillTR() {
-        if (Math.abs(this.lastFillX - this.player.x) + Math.abs(this.lastFillY - this.player.y) < this.history.length() / 256) return; // skip
-        this.lastFillX = this.player.x;
-        this.lastFillY = this.player.y;
-        const moves = this.history.toString();
-        let px = 1;
-        let py = 1;
-        let pix = 0 | 0;
-        for (let i = 0; i < moves.length; i++) {
-            switch (moves[i]) {
-                case 'L':
-                    pix = this.levelView.getPixel(px, py + 1);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px, py + 1, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px, py + 2, this.levelView.deadendColor32);
-                    }
-                    px -= 2;
-                    pix = this.levelView.getPixel(px, py + 1);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px, py + 1, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px, py + 2, this.levelView.deadendColor32);
-                    }
-                    break;
-                case 'R':
-                    pix = this.levelView.getPixel(px, py - 1);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px, py - 1, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px, py - 2, this.levelView.deadendColor32);
-                    }
-                    px += 2;
-                    pix = this.levelView.getPixel(px, py - 1);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px, py - 1, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px, py - 2, this.levelView.deadendColor32);
-                    }
-                    break;
-                case 'U':
-                    pix = this.levelView.getPixel(px - 1, py);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px - 1, py, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px - 2, py, this.levelView.deadendColor32);
-                    }
-                    py -= 2;
-                    pix = this.levelView.getPixel(px - 1, py);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px - 1, py, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px - 2, py, this.levelView.deadendColor32);
-                    }
-                    break;
-                case 'D':
-                    pix = this.levelView.getPixel(px + 1, py);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px + 1, py, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px + 2, py, this.levelView.deadendColor32);
-                    }
-                    py += 2;
-                    pix = this.levelView.getPixel(px + 1, py);
-                    if (pix === this.levelView.bgColor32 || pix === this.levelView.backtrackColor32) {
-                        this.levelView.setPixel(px + 1, py, this.levelView.deadendColor32);
-                        this.levelView.setPixel(px + 2, py, this.levelView.deadendColor32);
-                    }
-                    break;
-            }
-        }
-    }
-
-    private handleRandomWalk() {
-        const now = performance.now();
-        const mPressed = this.input.isPressed('m', 'M');
-        const mEdge = this.input.consumeKey('m', 'M');
-
-        if (!mPressed) {
-            this.randomWalkHeld = false;
-            this.randomWalkRepeat = false;
-            this.randomWalkDelayUntil = 0;
-            this.randomWalkHoldStart = 0;
-            this.randomWalkMulti = 1;
-            return;
-        }
-
-        if (!this.randomWalkHeld) {
-            this.randomWalkHeld = true;
-            this.randomWalkRepeat = false;
-            this.randomWalkHoldStart = now;
-            this.randomWalkDelayUntil = now + Consts.randomWalkRepeatDelayMs;
-            this.randomWalkMulti = 1;
-        }
-
-        if (!this.randomWalkRepeat) {
-            if (mEdge) this.performRandomStep();
-            if (now >= this.randomWalkDelayUntil) this.randomWalkRepeat = true;
-            return;
-        }
-
-        const holdDuration = now - this.randomWalkHoldStart;
-        if (holdDuration >= Consts.randomWalkRepeatDelayMs * 2) {
-            this.randomWalkHoldStart += Consts.randomWalkRepeatDelayMs / 8;
-            this.randomWalkMulti += 1 + (this.randomWalkMulti * 1.01 >> 1);
-            if (this.randomWalkMulti > 16384) this.randomWalkMulti = 16384;
-        }
-        this.performRandomStep(this.randomWalkMulti);
-    }
-
-    private performRandomStep(count = 1) {
-        for (let i = 0; i < count; i++) {
-            const step = this.getRandomStepDirection();
-            if (!step) return;
-            this.updatePlayer(step);
-            if (this.player.x === this.goal.x && this.player.y === this.goal.y) return;
-        }
-    }
-
-    private getRandomStepDirection(): 'L' | 'R' | 'U' | 'D' | 'B' | null {
-        const cx = this.player.x;
-        const cy = this.player.y;
-        const options: Array<{ dir: 'L' | 'R' | 'U' | 'D'; dx: number; dy: number }> = [
-            {dir: 'L', dx: -2, dy: 0},
-            {dir: 'R', dx: 2, dy: 0},
-            {dir: 'U', dx: 0, dy: -2},
-            {dir: 'D', dx: 0, dy: 2},
-        ];
-        const valid: Array<'L' | 'R' | 'U' | 'D'> = [];
-        for (const option of options) {
-            const nx = cx + option.dx;
-            const ny = cy + option.dy;
-            if (!this.canStepTo(cx, cy, nx, ny)) continue;
-            if (nx === this.goal.x && ny === this.goal.y) return null;
-            const targetColor = this.levelView.getPixel(nx, ny);
-            if (targetColor === this.levelView.deadendColor32 || targetColor === this.levelView.trailColor32) continue;
-            valid.push(option.dir);
-        }
-        if (valid.length === 0) return this.history.length() > 0 ? 'B' : null;
-
-        // --- rechts/unten bevorzugen (je nach Position zum Ziel) ---
-        if (this.goal.x - this.player.x >= this.goal.y - this.player.y) {
-            for (let i = 0; i < valid.length; i++) if (valid[i] == 'R') return 'R';
-            for (let i = 0; i < valid.length; i++) if (valid[i] == 'D') return 'D';
-        } else {
-            for (let i = 0; i < valid.length; i++) if (valid[i] == 'D') return 'D';
-            for (let i = 0; i < valid.length; i++) if (valid[i] == 'R') return 'R';
-        }
-
-        // --- Rest: zufällige Wahl ---
-        const index = Math.floor(Math.random() * valid.length);
-        return valid[index];
     }
 
     private toggleMarkerAt(x: number, y: number) {
@@ -827,17 +683,4 @@ export class Game {
         if (this.markers.delete(k)) this.needsRender = true;
     }
 
-}
-
-// Schneidet den historyRaw-String beim letzten LRUD-Zeichen ab (inkl. dieser Position
-// und allem danach). Resultat: nach dem Replay steht der Spieler genau einen Schritt
-// vor seinem zuletzt gemachten Zug. Marker/Undo nach dem letzten Schritt fallen weg.
-function trimToBeforeLastLrud(raw: string): string {
-    for (let i = raw.length - 1; i >= 0; i--) {
-        const c = raw.charCodeAt(i);
-        if (c === 76 || c === 82 || c === 85 || c === 68) {
-            return raw.slice(0, i);
-        }
-    }
-    return raw;
 }

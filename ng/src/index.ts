@@ -80,8 +80,8 @@ async function bootstrap() {
                     startEndless(internal);
                 });
             } else if (act === 'hard-reset') {
-                if (confirm('Spielstand komplett löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
-                    clearAllSaves();
+                if (confirm('Idle-Spielstand löschen? Endless-Stand bleibt erhalten.')) {
+                    clearIdleSaves();
                     location.reload();
                 }
             }
@@ -105,18 +105,11 @@ function collectStats() {
     };
 }
 
-function clearAllSaves() {
-    // Alle Modi-Caches/Saves sowie etwaige Alt-DBs verwerfen
-    const dbs = [
-        'idle-laby-cache', 'idle-laby-cache-idle', 'idle-laby-cache-endless',
-        'idle-laby-save-idle', 'idle-laby-save-endless',
-    ];
+function clearIdleSaves() {
+    // Nur Idle-Slots verwerfen, Endless bleibt unangetastet.
+    const dbs = ['idle-laby-cache-idle', 'idle-laby-save-idle'];
     for (const db of dbs) {
         try { indexedDB.deleteDatabase(db); } catch { /* ignorieren */ }
-    }
-    // localStorage-Reste der Vor-Save-Ära ebenfalls löschen
-    for (const key of ['idle-laby-level', 'idle-laby-historyRaw']) {
-        try { localStorage.removeItem(key); } catch { /* ignorieren */ }
     }
 }
 

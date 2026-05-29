@@ -26,6 +26,16 @@ body {
     width: 100%;
 }
 
+#hud .hud-bot {
+    color: #fde047;
+    font-weight: 700;
+}
+
+#hud .hud-bot.hud-bot-on {
+    color: #4ade80;
+    text-shadow: 0 0 0.4em rgba(74, 222, 128, 0.55);
+}
+
 #game-wrap {
     position: relative;
     height: calc(100vh - 24px);
@@ -339,6 +349,194 @@ canvas#menu-bg {
     text-align: center;
     padding: 0.75em 0.5em;
     font-style: italic;
+}
+
+/* ---- Shop (Idle-Modus) ---- */
+
+#shop-button {
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    position: absolute;
+    top: 2em;
+    left: 0.75em;
+    z-index: 5;
+    padding: 0.5em 1.1em;
+    border: 1px solid rgba(253, 224, 71, 0.55);
+    border-radius: 0.5em;
+    background: linear-gradient(180deg, rgba(31, 41, 55, 0.85) 0%, rgba(17, 22, 30, 0.85) 100%);
+    color: #fde047;
+    font-size: 1em;
+    font-weight: 700;
+    letter-spacing: 0.025em;
+    cursor: pointer;
+    box-shadow: 0 0 0.75em rgba(253, 224, 71, 0.2);
+    transition: transform 120ms ease, border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+#shop-button:hover {
+    border-color: rgba(253, 224, 71, 0.95);
+    background: linear-gradient(180deg, rgba(50, 64, 84, 0.95) 0%, rgba(30, 38, 50, 0.95) 100%);
+    box-shadow: 0 0 0 1px rgba(253, 224, 71, 0.3) inset, 0 0 1.25em rgba(253, 224, 71, 0.35);
+    transform: translateY(-0.0625em);
+}
+
+#shop-button:focus-visible {
+    outline: 2px solid #fde047;
+    outline-offset: 2px;
+}
+
+#shop-overlay {
+    font-size: calc(min(100vh, 100vw) * 0.025);
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2em;
+    box-sizing: border-box;
+}
+
+.shop-panel {
+    box-sizing: border-box;
+    width: min(34em, 92vw);
+    max-height: calc(100vh - 4em);
+    padding: 1.5em;
+    background: rgba(15, 17, 21, 0.94);
+    border: 1px solid rgba(253, 224, 71, 0.45);
+    border-radius: 0.75em;
+    box-shadow: 0 1.5em 3.75em rgba(0, 0, 0, 0.65), 0 0 2em rgba(253, 224, 71, 0.15);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.shop-panel h2 {
+    margin: 0 0 0.5em 0;
+    color: #fde047;
+    font-size: 1.5em;
+    font-weight: 600;
+}
+
+.shop-coins {
+    margin: 0 0 1em 0;
+    font: 1em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #eaeaea;
+}
+
+.shop-coins .shop-coin-value {
+    color: #fde047;
+    font-weight: 700;
+}
+
+.shop-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    margin: 0 0 1em 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+}
+
+.shop-row {
+    padding: 0.6em 0.75em;
+    border: 1px solid rgba(253, 224, 71, 0.18);
+    border-radius: 0.4em;
+    background: rgba(0, 0, 0, 0.25);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: 0.75em;
+    align-items: center;
+}
+
+.shop-row .shop-row-label {
+    color: #eaeaea;
+    font-weight: 600;
+}
+
+.shop-row .shop-row-desc {
+    color: rgba(234, 234, 234, 0.65);
+    font-size: 0.85em;
+    margin-top: 0.15em;
+}
+
+.shop-row .shop-row-owned {
+    color: #4ade80;
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+.shop-row.shop-row-locked .shop-row-label,
+.shop-row.shop-row-locked .shop-row-desc {
+    opacity: 0.55;
+}
+
+.shop-buy-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    padding: 0.45em 0.9em;
+    border: 1px solid rgba(253, 224, 71, 0.55);
+    border-radius: 0.4em;
+    background: transparent;
+    color: #fde047;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.shop-buy-btn:hover:not(:disabled) {
+    border-color: #fde047;
+    background: rgba(253, 224, 71, 0.1);
+    box-shadow: 0 0 0.75em rgba(253, 224, 71, 0.3);
+}
+
+.shop-buy-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.shop-empty {
+    color: rgba(234, 234, 234, 0.5);
+    text-align: center;
+    padding: 1em;
+    font-style: italic;
+}
+
+.shop-panel .shop-close {
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    margin: 0;
+    border: 1px solid rgba(253, 224, 71, 0.5);
+    background: transparent;
+    color: #fde047;
+    padding: 0.5em 0.875em;
+    border-radius: 0.5em;
+    cursor: pointer;
+    align-self: flex-end;
+}
+
+.shop-panel .shop-close:hover {
+    border-color: #fde047;
+    box-shadow: 0 0 0.75em rgba(253, 224, 71, 0.3);
+}
+
+.shop-list::-webkit-scrollbar {
+    width: 0.5em;
+}
+
+.shop-list::-webkit-scrollbar-thumb {
+    background: rgba(253, 224, 71, 0.4);
+    border-radius: 0.25em;
+}
+
+.shop-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(253, 224, 71, 0.7);
 }
 
 /* Scrollbar etwas dezenter */
