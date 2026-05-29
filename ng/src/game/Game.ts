@@ -15,6 +15,13 @@ export interface GameOptions {
     save?: GameSave | null;
     mode?: GameMode;
     onExit?: () => void;
+    /**
+     * Wenn gesetzt, startet das Spiel auf diesem (0-basierten) Level.
+     * Nach erfolgreichem Lösen wird statt zum nächsten Level zum
+     * im Save gespeicherten aktuellen Level zurückgesprungen.
+     * Verwendet für Endless-Replay aus dem Stats-Panel.
+     */
+    replayLevel?: number;
 }
 
 export class Game {
@@ -23,14 +30,11 @@ export class Game {
     private ctx: CanvasRenderingContext2D;
     private hud!: HUDView;
     private rafId: number | null = null;
+    private disposed = false;
     private laby!: Laby;
     private levelView!: Level;
 
     private needsRender = true;
-
-    private fpsFrames = 0;
-    private fpsLastTime = performance.now();
-    private fpsValue = 0;
 
     private camera = new Camera();
     private showGrid = true;
@@ -40,8 +44,12 @@ export class Game {
     private level = 0; // gameLevel beginnt bei 0
     private player = {x: 1, y: 1, r: 0.35};
     private goal = {x: 0, y: 0};
-    private moves = 0;
+    private moves = 0;       // "echte" Pfadlänge: zählt bei Undo wieder runter
+    private totalMoves = 0;  // Gesamtschritte inkl. Rückwärts und Marker, nur aufwärts
     private history = new StringBuilder();
+    private historyRaw = new StringBuilder();   // wird nur im Endless-Modus benutzt (persistiert pro Level)
+    private replaying = false;                  // aktiv während des Replays beim Level-Start (keine Persistierung)
+    private lastHistorySaveAt = 0;              // Throttle-Zeitstempel für historyRaw-Persistenz
     private markers = new Set<number>();
     private randomWalkHeld = false;
     private randomWalkRepeat = false;
@@ -64,6 +72,7 @@ export class Game {
     private readonly save: GameSave | null;
     private readonly mode: GameMode;
     private readonly onExit: (() => void) | null;
+    private replayMode = false;
 
     constructor(canvas: HTMLCanvasElement, opts?: GameOptions) {
         this.bgCanvas = canvas;
@@ -71,6 +80,7 @@ export class Game {
         this.save = opts?.save ?? null;
         this.mode = opts?.mode ?? 'idle';
         this.onExit = opts?.onExit ?? null;
+        this.replayMode = typeof opts?.replayLevel === 'number';
 
         const fg = document.createElement('canvas');
         fg.id = 'game-fg';
@@ -88,7 +98,12 @@ export class Game {
         this.levelView = new Level(this.bgCanvas);
         this.levelView.setShowGrid(this.showGrid);
 
-        this.level = this.save ? this.save.getLevel() : 0;
+        // Replay: explizit angefordertes Level; sonst zuletzt erreichtes Level aus dem Save.
+        if (typeof opts?.replayLevel === 'number' && opts.replayLevel >= 0) {
+            this.level = opts.replayLevel >>> 0;
+        } else {
+            this.level = this.save ? this.save.getLevel() : 0;
+        }
 
         // Zuerst Viewgröße initialisieren, damit Autofit korrekte Maße erhält
         this.onResize();
@@ -110,21 +125,16 @@ export class Game {
     }
 
     start() {
-        if (this.rafId != null) return;
+        if (this.rafId != null || this.disposed) return;
         const loop = () => {
+            // Guard: dispose() während eines vorherigen Frames könnte angefordert worden sein
+            if (this.disposed) { this.rafId = null; return; }
             this.update();
+            // update() kann via ESC -> onExit -> dispose() den Game bereits abgeräumt haben
+            if (this.disposed) { this.rafId = null; return; }
             if (this.needsRender) {
                 this.render();
                 this.needsRender = false;
-            }
-            this.fpsFrames++;
-            const now = performance.now();
-            const dt = now - this.fpsLastTime;
-            if (dt >= 1000) {
-                this.fpsValue = Math.round((this.fpsFrames * 1000) / dt);
-                this.fpsFrames = 0;
-                this.fpsLastTime = now;
-                this.updateHud();
             }
             this.rafId = requestAnimationFrame(loop);
         };
@@ -136,8 +146,12 @@ export class Game {
         this.rafId = null;
     }
 
-    // Alle Ressourcen und DOM-Bindings sauber abräumen.
+    // Alle Ressourcen und DOM-Bindings sauber abräumen. Idempotent.
     dispose() {
+        if (this.disposed) return;
+        this.disposed = true;
+        // Endless: ungesicherte history-Änderungen noch fest persistieren
+        this.persistHistoryNow();
         this.stop();
         window.removeEventListener('resize', this.onResize);
         this.bgCanvas.removeEventListener('mousedown', this.onMouseDown);
@@ -201,6 +215,8 @@ export class Game {
         if (this.input.consumeKey('r', 'R')) {
             const atStart = this.player.x === 1 && this.player.y === 1;
             if (!atStart && confirm('Level zurücksetzen und zum Start zurückkehren?')) {
+                // Endless: gespeicherten Verlauf für dieses Level verwerfen
+                if (this.mode === 'endless') this.save?.setHistory(this.level, '');
                 this.initLevel();
             }
         }
@@ -213,10 +229,42 @@ export class Game {
 
         // Ziel erreicht?
         if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
-            this.level = this.computeNextLevel(this.level);
-            this.save?.setLevel(this.level);
+            this.onLevelSolved();
+            if (this.replayMode) {
+                // Replay: zurück zum zuletzt erreichten/höchsten Level.
+                // Save bleibt unverändert (kein Aufstieg), nur historyRaw/Best wurden aktualisiert.
+                this.replayMode = false;
+                const current = this.save?.getLevel() ?? this.level;
+                this.level = Math.max(current, this.level);
+            } else {
+                this.level = this.computeNextLevel(this.level);
+                this.save?.setLevel(this.level);
+            }
             this.initLevel();
+        } else if (this.mode === 'endless') {
+            // Throttled historyRaw-Persistenz (max 1x pro Sekunde)
+            const now = performance.now();
+            if (now - this.lastHistorySaveAt >= 1000) {
+                this.persistHistoryNow();
+                this.lastHistorySaveAt = now;
+            }
         }
+    }
+
+    // Wird aufgerufen, wenn der Spieler das aktuelle Level abgeschlossen hat.
+    // Im Endless: Bestwerte aktualisieren, historyRaw so kürzen dass nach dem Replay
+    // beim Wiederöffnen der Spieler genau 1 Schritt vor dem Ziel steht.
+    private onLevelSolved() {
+        if (this.mode !== 'endless' || !this.save) return;
+        this.save.recordBest(this.level, this.moves, this.totalMoves);
+        const raw = this.historyRaw.toString();
+        const trimmed = trimToBeforeLastLrud(raw);
+        this.save.setHistory(this.level, trimmed);
+    }
+
+    private persistHistoryNow() {
+        if (this.mode !== 'endless' || !this.save) return;
+        this.save.setHistory(this.level, this.historyRaw.toString());
     }
 
     // Schritt im Modus auf das nächste Level. Idle: +1, Endless: Sprung auf nächste largeLevels-Stufe.
@@ -275,8 +323,7 @@ export class Game {
     }
 
     private updateHud() {
-        const {tileSize} = this.camera.getOffsets();
-        this.hud.set({level: this.level + 1, moves: this.moves, tileSize, fps: this.fpsValue});
+        this.hud.set({level: this.level + 1, moves: this.moves, totalMoves: this.totalMoves});
     }
 
     private onResize() {
@@ -418,7 +465,10 @@ export class Game {
         this.laby = this.createLabyForLevel(this.level);
 
         this.moves = 0;
+        this.totalMoves = 0;
         this.history = new StringBuilder();
+        this.historyRaw = new StringBuilder();
+        this.lastHistorySaveAt = 0;
         this.player.x = 1;
         this.player.y = 1;
         this.goal.x = Math.max(1, this.laby.pixWidth - 2);
@@ -432,6 +482,34 @@ export class Game {
         this.camera.centerOnPlayerTile(this.player.x, this.player.y);
         this.followPaused = false;
         this.needsRender = true;
+
+        // Endless-Modus: gespeicherten Verlauf für dieses Level einspielen
+        this.replayHistoryIfAny();
+    }
+
+    // Spielt einen gespeicherten historyRaw (Endless) Zeichen für Zeichen ab,
+    // sodass der Spielzustand exakt wie vor dem letzten Speichern aussieht.
+    private replayHistoryIfAny() {
+        if (this.mode !== 'endless' || !this.save) return;
+        const raw = this.save.getHistory(this.level);
+        if (!raw) return;
+        this.replaying = true;
+        try {
+            for (let i = 0; i < raw.length; i++) {
+                const c = raw.charAt(i);
+                if (c === 'L' || c === 'R' || c === 'U' || c === 'D' || c === 'B' || c === 'M') {
+                    this.updatePlayer(c);
+                }
+            }
+        } finally {
+            this.replaying = false;
+        }
+        // Nach Replay HistoryRaw mit dem geladenen Stand synchronisieren
+        this.historyRaw = new StringBuilder();
+        this.historyRaw.append(raw);
+        this.camera.centerOnPlayerTile(this.player.x, this.player.y);
+        this.followPaused = false;
+        this.needsRender = true;
     }
 
     // Verarbeitet Spieler-relevante Eingaben (Rohcodes):
@@ -440,6 +518,8 @@ export class Game {
         this.followPaused = false;
         if (inputKey === 'M') {
             this.toggleMarkerAt(this.player.x, this.player.y);
+            this.totalMoves++;
+            this.recordRawInput('M');
             return;
         }
 
@@ -461,6 +541,8 @@ export class Game {
             this.player.x = nx;
             this.player.y = ny;
             this.moves = Math.max(0, this.moves - 1);
+            this.totalMoves++;
+            this.recordRawInput('B');
             this.autoClearMarkerAt(this.player.x, this.player.y);
             this.needsRender = true;
             this.history.removeLastChar();
@@ -498,17 +580,27 @@ export class Game {
             this.applyBacktrackHighlight(prevX, prevY, cx, cy, highlightMode);
             this.history.removeLastChar();
             this.moves = Math.max(0, this.moves - 1);
+            this.totalMoves++;
         } else {
             this.levelView.markCell(nx - cx, ny - cy, 'trail');
             this.levelView.markCell(nx, ny, 'trail');
             this.history.append(inputKey);
             this.moves += 1;
+            this.totalMoves++;
             // fillTR/fillBL sind aktuell deaktiviert (gehören später zum Bot).
             // if (ny === 1 || nx === this.laby.pixWidth - 2) this.fillTR();
             // if (nx === 1 || ny === this.laby.pixHeight - 2) this.fillBL();
         }
+        this.recordRawInput(inputKey);
         this.autoClearMarkerAt(this.player.x, this.player.y);
         this.needsRender = true;
+    }
+
+    // Hängt einen Roh-Input an die historyRaw (Endless) an, solange nicht repliziert wird.
+    private recordRawInput(c: 'L' | 'R' | 'U' | 'D' | 'B' | 'M') {
+        if (this.replaying) return;
+        if (this.mode !== 'endless') return;
+        this.historyRaw.append(c);
     }
 
     private fillBL() {
@@ -735,4 +827,17 @@ export class Game {
         if (this.markers.delete(k)) this.needsRender = true;
     }
 
+}
+
+// Schneidet den historyRaw-String beim letzten LRUD-Zeichen ab (inkl. dieser Position
+// und allem danach). Resultat: nach dem Replay steht der Spieler genau einen Schritt
+// vor seinem zuletzt gemachten Zug. Marker/Undo nach dem letzten Schritt fallen weg.
+function trimToBeforeLastLrud(raw: string): string {
+    for (let i = raw.length - 1; i >= 0; i--) {
+        const c = raw.charCodeAt(i);
+        if (c === 76 || c === 82 || c === 85 || c === 68) {
+            return raw.slice(0, i);
+        }
+    }
+    return raw;
 }

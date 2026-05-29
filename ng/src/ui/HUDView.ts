@@ -1,8 +1,7 @@
 export interface HUDState {
     level: number;
     moves: number;
-    tileSize: number;
-    fps: number;
+    totalMoves: number;
 }
 
 export class HUDView {
@@ -15,7 +14,7 @@ export class HUDView {
 
     set(state: HUDState) {
         if (!this.el) return;
-        const text = `Level: ${state.level}  Moves: ${state.moves}  |  Tile: ${state.tileSize}px (+/- , 0 fit)  |  Move: WASD/↑↓←→  Reset: R  Mark: Space  Center: Enter  |  FPS: ${state.fps}`;
+        const text = `Level: ${state.level}  Moves: ${state.moves} / ${state.totalMoves}  |  Move: WASD/↑↓←→  Reset: R  Mark: Space  Center: Enter  Zoom: +/-, 0 fit`;
         if (text !== this.last) {
             this.el.textContent = text;
             this.last = text;

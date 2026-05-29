@@ -49,18 +49,36 @@ async function bootstrap() {
         menu.show();
     };
 
+    const startEndless = (replayLevel?: number) => {
+        menu.hide();
+        appRoot.style.display = '';
+        game = new Game(gameCanvas, {
+            cache: endlessCache,
+            save: endlessSave,
+            mode: 'endless',
+            onExit: returnToMenu,
+            replayLevel,
+        });
+        game.start();
+        (window as any).__game = game;
+    };
+
     const menu = new MainMenu(menuRoot, bgCanvas, {
         onSelect: (act: MenuAction) => {
-            if (act === 'idle' || act === 'endless') {
+            if (act === 'idle') {
                 menu.hide();
                 appRoot.style.display = '';
-                const cache = act === 'endless' ? endlessCache : idleCache;
-                const save = act === 'endless' ? endlessSave : idleSave;
-                game = new Game(gameCanvas, {cache, save, mode: act, onExit: returnToMenu});
+                game = new Game(gameCanvas, {cache: idleCache, save: idleSave, mode: 'idle', onExit: returnToMenu});
                 game.start();
                 (window as any).__game = game;
+            } else if (act === 'endless') {
+                startEndless();
             } else if (act === 'stats') {
-                menu.showStats(collectStats());
+                menu.showStats(collectStats(), (displayedLevel: number) => {
+                    // Anzeige ist 1-basiert, intern 0-basiert
+                    const internal = Math.max(0, (displayedLevel | 0) - 1);
+                    startEndless(internal);
+                });
             } else if (act === 'hard-reset') {
                 if (confirm('Spielstand komplett löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
                     clearAllSaves();
@@ -72,12 +90,19 @@ async function bootstrap() {
     menu.show();
 }
 
-function collectStats(): Array<{label: string; value: string}> {
+function collectStats() {
     // Save hält intern 0-basiertes Level, für die Anzeige +1
-    return [
-        {label: 'Idle Level', value: String(idleSave.getLevel() + 1)},
-        {label: 'Endless Level', value: String(endlessSave.getLevel() + 1)},
-    ];
+    return {
+        summary: [
+            {label: 'Idle Level', value: String(idleSave.getLevel() + 1)},
+            {label: 'Endless Level', value: String(endlessSave.getLevel() + 1)},
+        ],
+        endlessLevels: endlessSave.listBests().map((b) => ({
+            level: b.level + 1,
+            moves: b.moves,
+            totalMoves: b.totalMoves,
+        })),
+    };
 }
 
 function clearAllSaves() {

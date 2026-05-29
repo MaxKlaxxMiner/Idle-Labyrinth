@@ -207,17 +207,26 @@ canvas#menu-bg {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1.5em;
+    padding: 2em;
     box-sizing: border-box;
 }
 
 .stats-panel {
-    width: min(26.25em, 92vw);
+    /* border-box: max-height/width beziehen sich auf die Outer-Maße inkl. Padding/Border.
+       Width entspricht dem alten content-box-Maß (26.25em) plus padding 3em -> 29.25em outer */
+    box-sizing: border-box;
+    width: min(29.25em, 92vw);
+    /* Höhe bis zum Viewport ausnutzen; Overlay hat 2em Padding oben+unten */
+    max-height: calc(100vh - 4em);
     padding: 1.5em;
     background: rgba(15, 17, 21, 0.92);
     border: 1px solid rgba(56, 189, 248, 0.35);
     border-radius: 0.75em;
     box-shadow: 0 1.5em 3.75em rgba(0, 0, 0, 0.6);
+    /* Flex-Spalte, damit die Liste den freien Restraum füllt */
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
 .stats-panel h2 {
@@ -227,7 +236,7 @@ canvas#menu-bg {
     font-weight: 600;
 }
 
-.stats-panel dl {
+.stats-panel dl.stats-summary {
     margin: 0 0 1em 0;
     display: grid;
     grid-template-columns: auto 1fr;
@@ -243,6 +252,107 @@ canvas#menu-bg {
 .stats-panel dd {
     margin: 0;
     color: #eaeaea;
+}
+
+.stats-section-title {
+    margin: 0.25em 0 0.5em;
+    color: #38bdf8;
+    font-size: 1em;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+}
+
+.stats-list {
+    margin: 0 0 1em 0;
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 0.4em;
+    background: rgba(0, 0, 0, 0.25);
+    font: 0.9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    /* Liste füllt den restlichen Platz im Panel; head bleibt fix, body scrollt */
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.stats-list-head,
+.stats-list-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    column-gap: 0.5em;
+    padding: 0.25em 0.6em;
+}
+
+.stats-list-head {
+    color: rgba(234, 234, 234, 0.55);
+    border-bottom: 1px solid rgba(56, 189, 248, 0.18);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+
+.stats-list-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.stats-list-row {
+    color: #eaeaea;
+}
+
+.stats-list-row:nth-child(odd) {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.stats-list-row > span:first-child {
+    color: #fde047;
+}
+
+.stats-list-row .stats-level-link {
+    color: #fde047;
+    cursor: pointer;
+    border-radius: 0.25em;
+    padding: 0 0.35em;
+    margin: 0 -0.35em 0 -0.35em;
+    transition: background 120ms ease, box-shadow 120ms ease;
+}
+
+.stats-list-row .stats-level-link:hover {
+    background: rgba(253, 224, 71, 0.18);
+    box-shadow: 0 0 0.6em rgba(253, 224, 71, 0.25);
+}
+
+.stats-list-row .stats-level-link:focus-visible {
+    outline: 2px solid #fde047;
+    outline-offset: 1px;
+}
+
+.stats-list-row .stats-extra {
+    color: #fde047;
+    opacity: 0.85;
+    margin-left: 0.1em;
+}
+
+.stats-list-empty {
+    color: rgba(234, 234, 234, 0.5);
+    text-align: center;
+    padding: 0.75em 0.5em;
+    font-style: italic;
+}
+
+/* Scrollbar etwas dezenter */
+.stats-list-body::-webkit-scrollbar {
+    width: 0.5em;
+}
+
+.stats-list-body::-webkit-scrollbar-thumb {
+    background: rgba(56, 189, 248, 0.4);
+    border-radius: 0.25em;
+}
+
+.stats-list-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(56, 189, 248, 0.7);
 }
 
 .stats-panel .stats-close {

@@ -41,19 +41,32 @@ export class MainMenu {
         this.closeStats();
     }
 
-    showStats(entries: Array<{label: string; value: string}>) {
+    showStats(
+        data: {
+            summary: Array<{label: string; value: string}>;
+            endlessLevels: Array<{level: number; moves: number; totalMoves: number}>;
+        },
+        onReplay?: (level: number) => void,
+    ) {
         this.closeStats();
         const overlay = document.createElement('div');
         overlay.id = 'stats-overlay';
         overlay.innerHTML = `
             <div class="stats-panel">
                 <h2>Stats</h2>
-                <dl></dl>
+                <dl class="stats-summary"></dl>
+                <h3 class="stats-section-title">Endless Bestwerte</h3>
+                <div class="stats-list" role="table">
+                    <div class="stats-list-head" role="row">
+                        <span>Level</span><span>Moves</span><span>Total</span>
+                    </div>
+                    <div class="stats-list-body"></div>
+                </div>
                 <button class="stats-close" type="button">Schließen</button>
             </div>
         `;
-        const dl = overlay.querySelector('dl') as HTMLElement;
-        for (const e of entries) {
+        const dl = overlay.querySelector('.stats-summary') as HTMLElement;
+        for (const e of data.summary) {
             const dt = document.createElement('dt');
             dt.textContent = e.label;
             const dd = document.createElement('dd');
@@ -61,6 +74,51 @@ export class MainMenu {
             dl.appendChild(dt);
             dl.appendChild(dd);
         }
+
+        const body = overlay.querySelector('.stats-list-body') as HTMLElement;
+        if (data.endlessLevels.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'stats-list-empty';
+            empty.textContent = 'Noch keine Endless-Level gelöst.';
+            body.appendChild(empty);
+        } else {
+            for (const e of data.endlessLevels) {
+                const extra = Math.max(0, e.totalMoves - e.moves);
+                const extraHtml = extra > 0 ? `<span class="stats-extra"> +${extra}</span>` : '';
+                const replayable = !!onReplay;
+                const levelHtml = replayable
+                    ? `<span class="stats-level-link" data-level="${e.level}" role="button" title="Level ${e.level} erneut spielen" tabindex="0">${e.level}</span>`
+                    : `<span>${e.level}</span>`;
+                const row = document.createElement('div');
+                row.className = 'stats-list-row';
+                row.setAttribute('role', 'row');
+                row.innerHTML = `
+                    ${levelHtml}
+                    <span>${e.moves}</span>
+                    <span>${e.totalMoves}${extraHtml}</span>
+                `;
+                body.appendChild(row);
+            }
+            if (onReplay) {
+                body.querySelectorAll<HTMLElement>('.stats-level-link').forEach((el) => {
+                    const trigger = () => {
+                        const lv = Number(el.dataset.level);
+                        if (Number.isFinite(lv)) {
+                            this.closeStats();
+                            onReplay(lv);
+                        }
+                    };
+                    el.addEventListener('click', trigger);
+                    el.addEventListener('keydown', (ev: KeyboardEvent) => {
+                        if (ev.key === 'Enter' || ev.key === ' ') {
+                            ev.preventDefault();
+                            trigger();
+                        }
+                    });
+                });
+            }
+        }
+
         overlay.querySelector('.stats-close')?.addEventListener('click', () => this.closeStats());
         overlay.addEventListener('click', (ev) => {
             if (ev.target === overlay) this.closeStats();
