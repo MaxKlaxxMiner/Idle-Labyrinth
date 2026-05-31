@@ -1,8 +1,8 @@
-import {Consts} from '@/game/Consts';
 import {Laby} from '@/lib/Laby';
 import {Level} from '@/view/Level';
 import {Input} from '@/input/Input';
 import {StringBuilder} from '@/lib/StringBuilder';
+import {RandomMersenne} from '@/lib/Random';
 
 /**
  * Minimal-Schnittstelle, die der Bot vom Spiel braucht. Die Felder werden bei jedem
@@ -20,18 +20,30 @@ export interface BotHost {
     canStepTo(cx: number, cy: number, nx: number, ny: number): boolean;
     /** Bot läuft nur, wenn der Host ihn aktiviert hat (Idle-Modus, Space-Toggle). */
     isBotActive(): boolean;
+    /** Höchste gekaufte AutoMover-Stufe (1=random, 2=smart, 3=smarter, 4=borderline, 5=speed; 0=keine). */
+    autoMoverTier(): number;
+    /** Effektiver Mindestabstand zwischen zwei Bot-Schritten in ms (inkl. Speed-Upgrades). */
+    botStepIntervalMs(): number;
 }
 
 /**
  * Bot-Logik (AutoMover + Highlight-Filler).
  *
  * Aktivierung steuert der Host (siehe `BotHost.isBotActive`). Im Idle-Modus
- * toggelt der Spieler mit Space; ist der Bot aktiv, läuft pro Frame ein
- * Random-Step alle `Consts.botStepIntervalMs` Millisekunden.
+ * toggelt der Spieler mit Space; ist der Bot aktiv, wird im Takt von
+ * `BotHost.botStepIntervalMs()` ein Random-Step ausgeführt (mit Catch-up bei
+ * verpassten Frames).
  */
 export class Bot {
+    // Obergrenze der pro Frame nachgeholten Schritte - reiner Runaway-Schutz. Reale Rückstände
+    // (auch in gedrosselten/ausgetabbten Tabs) liegen weit darunter; >1 Mio. Schritte/Sek sind machbar.
+    private static readonly MAX_CATCHUP_STEPS = 1048576;
+
     private readonly host: BotHost;
-    private lastStepTime = 0;
+    // Zeitpunkt (performance.now), an dem der nächste Schritt fällig ist.
+    private nextStepTime = 0;
+    // Deterministischer RNG; wird pro Level (Start/Reset) levelabhängig in-place neu geseedet.
+    private readonly rng = new RandomMersenne(0);
 
     // Fill-Highlight-Skip-Schwelle: letzte Position, an der gefüllt wurde
     private lastFillX = 0;
@@ -41,20 +53,42 @@ export class Bot {
         this.host = host;
     }
 
-    /** Setzt den Bot-Zustand auf Level-Start zurück. */
-    resetForLevel(): void {
-        this.lastStepTime = 0;
+    /** Setzt den Bot-Zustand auf Level-Start zurück; seedt den RNG levelabhängig (reproduzierbar). */
+    resetForLevel(seed: number): void {
+        this.rng.init(seed);
         this.lastFillX = 0;
         this.lastFillY = 0;
+        this.armTimer();
     }
 
-    /** Pro Frame in Game.update() aufgerufen. Bewegt den Spieler einen Schritt, sofern aktiv. */
+    /** Beim Aktivieren (Space-Toggle) aufrufen, damit der erste Schritt nicht instant wirkt. */
+    onActivated(): void {
+        this.armTimer();
+    }
+
+    /** Nach manuellem Eingriff aufrufen: der nächste Bot-Schritt folgt erst ein Intervall später. */
+    deferNextStep(): void {
+        this.armTimer();
+    }
+
+    /** Setzt die nächste Schritt-Deadline ein Intervall in die Zukunft (kein Schritt-Stau). */
+    private armTimer(): void {
+        this.nextStepTime = performance.now() + this.host.botStepIntervalMs();
+    }
+
+    /** Pro Frame in Game.update() aufgerufen. Bewegt den Spieler im Bot-Takt, sofern aktiv. */
     tick(): void {
         if (!this.host.isBotActive()) return;
+        const interval = this.host.botStepIntervalMs();
         const now = performance.now();
-        if (now - this.lastStepTime < Consts.botStepIntervalMs) return;
-        this.lastStepTime = now;
-        this.performRandomStep();
+        if (now < this.nextStepTime) return;
+        // Alle fälligen Schritte nachholen (Idle-Fortschritt im gedrosselten/ausgetabbten Tab bleibt
+        // erhalten). Die Deadline rückt um genau die gelaufenen Schritte vor (kein Drift); ein etwaiger
+        // Rest über dem Cap wird in den Folge-Frames abgearbeitet.
+        const pending = 1 + Math.floor((now - this.nextStepTime) / interval);
+        const steps = pending < Bot.MAX_CATCHUP_STEPS ? pending : Bot.MAX_CATCHUP_STEPS;
+        this.nextStepTime += steps * interval;
+        this.performRandomStep(steps);
     }
 
     /**
@@ -79,6 +113,7 @@ export class Bot {
 
     private getRandomStepDirection(): 'L' | 'R' | 'U' | 'D' | 'B' | null {
         const {player, goal, levelView, history} = this.host;
+        const tier = this.host.autoMoverTier();
         const cx = player.x;
         const cy = player.y;
         const options: Array<{dir: 'L' | 'R' | 'U' | 'D'; dx: number; dy: number}> = [
@@ -92,24 +127,37 @@ export class Bot {
             const nx = cx + option.dx;
             const ny = cy + option.dy;
             if (!this.host.canStepTo(cx, cy, nx, ny)) continue;
-            // Ziel direkt nehmen, sobald es in Reichweite ist (sonst stoppt der Bot davor).
-            if (nx === goal.x && ny === goal.y) return option.dir;
+            // Ziel direkt nehmen, sobald es einen Schritt entfernt und offen ist (ab 'smart').
+            if (tier >= 2 && nx === goal.x && ny === goal.y) return option.dir;
             const targetColor = levelView.getPixel(nx, ny);
-            if (targetColor === levelView.deadendColor32 || targetColor === levelView.trailColor32) continue;
+            const isDeadend = targetColor === levelView.deadendColor32;
+            const isTrail = targetColor === levelView.trailColor32;
+            if (tier >= 2) {
+                // Stufe 'smart': markierte Sackgassen und Trails strikt meiden.
+                if (isDeadend || isTrail) continue;
+            } else {
+                // Stufe 'random': nur grobe Laufrichtung - Sackgassen zu 50%, Trails zu 25% meiden.
+                if (isDeadend && this.rng.next() < 0.5) continue;
+                if (isTrail && this.rng.next() < 0.25) continue;
+            }
             valid.push(option.dir);
         }
+        // Sind keine Richtungen übrig, per 'B' aus der Sackgasse zurücklaufen (alle Stufen).
         if (valid.length === 0) return history.length() > 0 ? 'B' : null;
 
-        // Richtung priorisieren, die per Luftlinie näher zum Ziel führt
-        if (goal.x - player.x >= goal.y - player.y) {
-            for (let i = 0; i < valid.length; i++) if (valid[i] === 'R') return 'R';
-            for (let i = 0; i < valid.length; i++) if (valid[i] === 'D') return 'D';
-        } else {
-            for (let i = 0; i < valid.length; i++) if (valid[i] === 'D') return 'D';
-            for (let i = 0; i < valid.length; i++) if (valid[i] === 'R') return 'R';
+        if (tier >= 3) {
+            // Stufe 'smarter': Richtung priorisieren, die per Luftlinie näher zum Ziel führt.
+            // Start liegt oben-links, Ziel unten-rechts, daher Vergleich der Differenzen ohne Betrag.
+            if (goal.x - player.x >= goal.y - player.y) {
+                for (let i = 0; i < valid.length; i++) if (valid[i] === 'R') return 'R';
+                for (let i = 0; i < valid.length; i++) if (valid[i] === 'D') return 'D';
+            } else {
+                for (let i = 0; i < valid.length; i++) if (valid[i] === 'D') return 'D';
+                for (let i = 0; i < valid.length; i++) if (valid[i] === 'R') return 'R';
+            }
         }
 
-        const index = Math.floor(Math.random() * valid.length);
+        const index = Math.floor(this.rng.next() * valid.length);
         return valid[index];
     }
 

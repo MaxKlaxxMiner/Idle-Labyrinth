@@ -1,12 +1,12 @@
 /**
  * Upgrade-Registry für den Idle-Modus.
  *
- * Aktueller Stand: nur Definitionen (Stubs). Die Kosten sind Platzhalter,
- * das Balancing erfolgt später. Die Reihenfolge in UPGRADES legt die
- * Anzeige-Reihenfolge im Shop fest.
+ * Die Kosten sind teils Platzhalter; das Balancing erfolgt später. Der Shop sortiert die
+ * angezeigten Upgrades nach Preis (die Reihenfolge in UPGRADES ist nur die Quell-Reihenfolge).
  *
  * Siehe docs/IDLE_PLAN.md für das vollständige Konzept.
  */
+import {Consts} from '@/game/Consts';
 
 export type UpgradeId =
     | 'automover-random'
@@ -25,11 +25,33 @@ export interface UpgradeDef {
     id: UpgradeId;
     label: string;
     description: string;
+    /** Kosten der ersten Stufe (ganzzahlig). Folgekosten siehe costGrowthPercent. */
     cost: number;
     /** Vorausgesetzte Upgrades (alle müssen besessen sein, damit sichtbar). */
     requires?: UpgradeId[];
     /** Falls Stufen-Upgrade: max. Stufe; ohne Angabe = einmalig (max 1). */
     maxLevel?: number;
+    /** Ganzzahliger Preisaufschlag in Prozent je besessener Stufe (z. B. 50 = +50%); ohne Angabe konstant. */
+    costGrowthPercent?: number;
+    /** Optionale dynamische Beschreibung je nach aktueller Stufe (überschreibt description in der Anzeige). */
+    describe?: (level: number) => string;
+}
+
+/**
+ * Kosten der nächsten Stufe bei gegebenem aktuellem Stand (0 = noch nicht gekauft).
+ * Rein ganzzahlig (bigint): Preis = aufgerundet(cost * (1 + p/100)^owned), exakt berechnet
+ * über (100+p)^owned / 100^owned - kein Float, kein Präzisionsverlust.
+ */
+export function upgradeCost(def: UpgradeDef, ownedLevel: number): bigint {
+    const base = BigInt(def.cost);
+    const owned = ownedLevel > 0 ? ownedLevel : 0;
+    const pct = def.costGrowthPercent ?? 0;
+    if (pct <= 0 || owned === 0) return base;
+    const n = BigInt(owned);
+    const num = BigInt(100 + pct) ** n;
+    const den = 100n ** n;
+    // Aufrunden per Integer-Division: ceil(a/b) = (a + b - 1) / b.
+    return (base * num + den - 1n) / den;
 }
 
 export const UPGRADES: ReadonlyArray<UpgradeDef> = [
@@ -42,7 +64,7 @@ export const UPGRADES: ReadonlyArray<UpgradeDef> = [
     {
         id: 'automover-smart',
         label: 'AutoMover (Smart)',
-        description: 'Markiert Sackgassen als rot und meidet sie.',
+        description: 'Meidet rote Sackgassen und läuft nicht unnötig zurück.',
         cost: 500,
         requires: ['automover-random'],
     },
@@ -69,11 +91,17 @@ export const UPGRADES: ReadonlyArray<UpgradeDef> = [
     },
     {
         id: 'player-speed',
-        label: 'Spieler-Speed',
-        description: 'Erhöht die Bewegungsgeschwindigkeit.',
-        cost: 1000,
+        label: 'AutoMover-Speed',
+        description: 'Beschleunigt den AutoMover.',
+        cost: 100,
         requires: ['automover-random'],
-        maxLevel: 5,
+        maxLevel: Infinity,
+        costGrowthPercent: 50,
+        describe: (level) => {
+            const sps = (lvl: number) =>
+                1000 / (Consts.botStepIntervalMs * Math.pow(Consts.botStepSpeedupPerLevel, lvl));
+            return `${sps(level).toFixed(1)} -> ${sps(level + 1).toFixed(1)} Schritte/s`;
+        },
     },
     {
         id: 'rat-count',
@@ -89,7 +117,8 @@ export const UPGRADES: ReadonlyArray<UpgradeDef> = [
         description: 'Erhöht die Geschwindigkeit der Ratten.',
         cost: 5000,
         requires: ['rat-count'],
-        maxLevel: 5,
+        maxLevel: Infinity,
+        costGrowthPercent: 50,
     },
     {
         id: 'rat-teleporter',

@@ -81,6 +81,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
     private readonly bot!: Bot;
     private readonly shop!: ShopView | null;
     private botActive = false;
+    private shopOpenLastFrame = false;
 
     // ModeHost-API
     getHistoryRaw(): string {
@@ -88,15 +89,15 @@ export class Game implements BotHost, ModeHost, ShopHost {
     }
 
     // ShopHost-API
-    getCoins(): number {
-        return this.save?.getCoins() ?? 0;
+    getCoins(): bigint {
+        return this.save?.getCoins() ?? 0n;
     }
 
     getUpgradeLevel(id: UpgradeId): number {
         return this.save?.getUpgrade(id) ?? 0;
     }
 
-    purchase(id: UpgradeId, newLevel: number, cost: number): void {
+    purchase(id: UpgradeId, newLevel: number, cost: bigint): void {
         if (!this.save) return;
         if (this.save.getCoins() < cost) return;
         this.save.addCoins(-cost);
@@ -109,8 +110,26 @@ export class Game implements BotHost, ModeHost, ShopHost {
         return this.botActive;
     }
 
+    // BotHost-API: höchste gekaufte AutoMover-Stufe der Kette (1=random ... 5=speed; 0=keine).
+    autoMoverTier(): number {
+        const s = this.save;
+        if (!s) return 0;
+        if (s.getUpgrade('automover-smarter-borderline-speed') >= 1) return 5;
+        if (s.getUpgrade('automover-smarter-borderline') >= 1) return 4;
+        if (s.getUpgrade('automover-smarter') >= 1) return 3;
+        if (s.getUpgrade('automover-smart') >= 1) return 2;
+        if (s.getUpgrade('automover-random') >= 1) return 1;
+        return 0;
+    }
+
+    // BotHost-API: effektives Schrittintervall, durch 'player-speed' je Stufe um 10% verkürzt.
+    botStepIntervalMs(): number {
+        const level = this.save?.getUpgrade('player-speed') ?? 0;
+        return Consts.botStepIntervalMs * Math.pow(Consts.botStepSpeedupPerLevel, level);
+    }
+
     private isAutoMoverAvailable(): boolean {
-        return this.modeStrategy.id === 'idle' && (this.save?.getUpgrade('automover-random') ?? 0) >= 1;
+        return this.modeStrategy.id === 'idle' && this.autoMoverTier() >= 1;
     }
 
     constructor(canvas: HTMLCanvasElement, opts?: GameOptions) {
@@ -210,85 +229,103 @@ export class Game implements BotHost, ModeHost, ShopHost {
     }
 
     private update() {
-        // ESC -> Shop schließen falls offen, sonst zurück zum Hauptmenü
+        // ESC -> offenen Shop schließen, sonst zurück zum Hauptmenü
         if (this.input.consumeKey('Escape')) {
             if (this.shop?.isOpen()) {
                 this.shop.close();
+            } else {
+                this.onExit?.();
                 return;
             }
-            this.onExit?.();
-            return;
         }
 
-        // Bei offenem Shop pausiert die Spiellogik (keine Bewegung/Zoom/Bot etc.).
-        if (this.shop?.isOpen()) return;
+        const shopOpen = this.shop?.isOpen() ?? false;
 
-        // Zoom-Steuerung (über Camera)
-        let zoomChanged = false;
-        if (this.input.consumeKey('0')) {
-            this.camera.setBestFitZoom();
-            this.camera.centerOnPlayerTile(this.player.x, this.player.y);
-            this.followPaused = false;
-            zoomChanged = true;
-        } else if (this.input.consumeKey('+', '=')) {
-            zoomChanged = this.camera.zoom(1, this.player.x, this.player.y);
-        } else if (this.input.consumeKey('-')) {
-            zoomChanged = this.camera.zoom(-1, this.player.x, this.player.y);
+        // Solange der Shop offen ist - und einmal im Frame nach dem Schließen - gepufferte
+        // Tastendruck-Flanken verwerfen, damit währenddessen gedrückte Tasten (Space, WASD, ...)
+        // nicht beim Schließen nachträglich ausgeführt werden.
+        if (shopOpen || this.shopOpenLastFrame) {
+            this.input.clearEdges();
         }
-        if (zoomChanged) this.needsRender = true;
+        this.shopOpenLastFrame = shopOpen;
 
-        // Leertaste: im Endless setzt sie einen Marker, im Idle toggelt sie den AutoMover-Bot.
-        if (this.input.consumeKey(' ', 'Space')) {
-            if (this.modeStrategy.id === 'idle') {
-                if (this.isAutoMoverAvailable()) {
-                    this.botActive = !this.botActive;
-                    this.updateHud();
+        // Bei offenem Shop pausiert nur die Spieler-Eingabe; die Simulation (Bot, Level-Solve,
+        // Coins) und das Rendering laufen im Hintergrund weiter.
+        if (!shopOpen) {
+            // Zoom-Steuerung (über Camera)
+            let zoomChanged = false;
+            if (this.input.consumeKey('0')) {
+                this.camera.setBestFitZoom();
+                this.camera.centerOnPlayerTile(this.player.x, this.player.y);
+                this.followPaused = false;
+                zoomChanged = true;
+            } else if (this.input.consumeKey('+', '=')) {
+                zoomChanged = this.camera.zoom(1, this.player.x, this.player.y);
+            } else if (this.input.consumeKey('-')) {
+                zoomChanged = this.camera.zoom(-1, this.player.x, this.player.y);
+            }
+            if (zoomChanged) this.needsRender = true;
+
+            // Leertaste: im Endless setzt sie einen Marker, im Idle toggelt sie den AutoMover-Bot.
+            if (this.input.consumeKey(' ', 'Space')) {
+                if (this.modeStrategy.id === 'idle') {
+                    if (this.isAutoMoverAvailable()) {
+                        this.botActive = !this.botActive;
+                        if (this.botActive) this.bot.onActivated();
+                        this.updateHud();
+                    }
+                    // Ohne gekauften Bot bleibt Space im Idle wirkungslos (keine Marker).
+                } else {
+                    this.updatePlayer('M');
                 }
-                // Ohne gekauften Bot bleibt Space im Idle wirkungslos (keine Marker).
+            }
+
+            // Undo: Backspace/Delete -> genau einen Schritt zurück (Autorepeat durch Keydown-Repeat)
+            let manualMove = false;
+            if (this.input.consumeKey('Backspace', 'Delete')) {
+                this.updatePlayer('B');
+                manualMove = true;
             } else {
-                this.updatePlayer('M');
+                // Diskretes Vorwärts-Stepping: pro Tastendruck 1 Knoten (2 Tiles)
+                const stepKey = this.input.consumeStepKey();
+                if (stepKey) {
+                    this.updatePlayer(stepKey);
+                    manualMove = true;
+                }
+            }
+            // Manueller Eingriff bei aktivem Bot: nächsten Bot-Schritt um ein Intervall verschieben.
+            if (manualMove && this.botActive) this.bot.deferNextStep();
+
+            // Sofort auf Spieler zentrieren (Enter/NumpadEnter)
+            if (this.input.consumeKey('Enter', 'NumpadEnter', 'Return')) {
+                this.camera.centerOnPlayerTile(this.player.x, this.player.y);
+                this.followPaused = false;
+                this.needsRender = true;
+            }
+
+            // Reset: aktuelles Level neu starten. Kein Hard-Reset mehr per Taste (geht nur über Hauptmenü).
+            if (this.input.consumeKey('r', 'R')) {
+                const atStart = this.player.x === 1 && this.player.y === 1;
+                if (!atStart && confirm('Level zurücksetzen und zum Start zurückkehren?')) {
+                    // Endless: gespeicherten Verlauf für dieses Level verwerfen
+                    if (this.modeStrategy.usesHistory()) this.save?.setHistory(this.level, '');
+                    this.initLevel();
+                }
+            }
+
+            if (this.input.consumeKey('g', 'G')) {
+                this.showGrid = !this.showGrid;
+                this.levelView.setShowGrid(this.showGrid);
+                this.needsRender = true;
             }
         }
 
-        // Undo: Backspace/Delete -> genau einen Schritt zurück (Autorepeat durch Keydown-Repeat)
-        if (this.input.consumeKey('Backspace', 'Delete')) {
-            this.updatePlayer('B');
-        } else {
-            // Diskretes Vorwärts-Stepping: pro Tastendruck 1 Knoten (2 Tiles)
-            const stepKey = this.input.consumeStepKey();
-            if (stepKey) {
-                this.updatePlayer(stepKey);
-            }
-            // Bot-Hook: aktuell no-op, wird bei Idle-Bot-Aktivierung relevant.
-            this.bot.tick();
-        }
+        // AutoMover läuft unabhängig von der Eingabe weiter - auch bei offenem Shop.
+        this.bot.tick();
 
         // Kamera-Follow mit Dead-Zone (bei Drag pausieren)
         if (!this.dragging && !this.followPaused) {
             if (this.camera.updateFollowPlayerTile(this.player.x, this.player.y)) this.needsRender = true;
-        }
-
-        // Sofort auf Spieler zentrieren (Enter/NumpadEnter)
-        if (this.input.consumeKey('Enter', 'NumpadEnter', 'Return')) {
-            this.camera.centerOnPlayerTile(this.player.x, this.player.y);
-            this.followPaused = false;
-            this.needsRender = true;
-        }
-
-        // Reset: aktuelles Level neu starten. Kein Hard-Reset mehr per Taste (geht nur über Hauptmenü).
-        if (this.input.consumeKey('r', 'R')) {
-            const atStart = this.player.x === 1 && this.player.y === 1;
-            if (!atStart && confirm('Level zurücksetzen und zum Start zurückkehren?')) {
-                // Endless: gespeicherten Verlauf für dieses Level verwerfen
-                if (this.modeStrategy.usesHistory()) this.save?.setHistory(this.level, '');
-                this.initLevel();
-            }
-        }
-
-        if (this.input.consumeKey('g', 'G')) {
-            this.showGrid = !this.showGrid;
-            this.levelView.setShowGrid(this.showGrid);
-            this.needsRender = true;
         }
 
         // Ziel erreicht?
@@ -366,11 +403,11 @@ export class Game implements BotHost, ModeHost, ShopHost {
     }
 
     private updateHud() {
-        let coins: number | undefined;
-        let coinsPending: number | undefined;
+        let coins: bigint | undefined;
+        let coinsPending: bigint | undefined;
         let spaceAction: 'mark' | 'available' | 'active' | undefined;
         if (this.modeStrategy.id === 'idle') {
-            coins = this.save?.getCoins() ?? 0;
+            coins = this.save?.getCoins() ?? 0n;
             const clears = this.save?.getLevelClears(this.level) ?? 0;
             coinsPending = calculateLevelReward(this.level, clears + 1);
             if (this.isAutoMoverAvailable()) {
@@ -544,7 +581,8 @@ export class Game implements BotHost, ModeHost, ShopHost {
         this.goal.y = Math.max(1, this.laby.pixHeight - 2);
         this.markers.clear();
         this.levelView.setLaby(this.laby);
-        this.bot.resetForLevel();
+        // Bot-RNG levelabhängig seeden: gleiches Level/Reset -> gleiche Zufallsfolge (fair, reproduzierbar).
+        this.bot.resetForLevel(Consts.labySeedBase + this.level);
 
         // Camera: Weltmaße setzen, Best-Fit und zentrieren
         this.camera.setWorldSize(this.laby.pixWidth, this.laby.pixHeight);

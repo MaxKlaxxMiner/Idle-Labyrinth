@@ -5,7 +5,7 @@
  * - state:      { save: { level: number } }              - aktueller Level-Stand
  * - histories:  { [level: number]: string }              - pro Level die Eingabespur (Endless)
  * - best:       { [level: number]: { moves, totalMoves } } - Bestwerte pro gelöstem Level
- * - meta:       { coins: number }                        - Coin-Wallet (Idle)
+ * - meta:       { coins: bigint }                        - Coin-Wallet (Idle)
  * - upgrades:   { [upgradeId: string]: number }          - gekaufte Upgrade-Stufen (Idle)
  * - clears:     { [level: number]: number }              - Wiederholungs-Zähler pro Level (Idle)
  *
@@ -35,7 +35,7 @@ export class GameSave {
     private level = 0;
     private histories = new Map<number, string>();
     private bests = new Map<number, BestStat>();
-    private coins = 0;
+    private coins = 0n;
     private upgrades = new Map<string, number>();
     private clears = new Map<number, number>();
 
@@ -67,8 +67,9 @@ export class GameSave {
             const metaRec = await GameSave.reqToPromise<any>(
                 tx.objectStore(GameSave.STORE_META).get(GameSave.KEY_META),
             );
-            if (metaRec && Number.isFinite(metaRec.coins) && metaRec.coins >= 0) {
-                this.coins = metaRec.coins >>> 0;
+            const loadedCoins = GameSave.toBigInt(metaRec?.coins);
+            if (loadedCoins !== null && loadedCoins >= 0n) {
+                this.coins = loadedCoins;
             }
 
             // histories: Map<level, string>
@@ -175,21 +176,20 @@ export class GameSave {
 
     // ----- Coins (Idle) -----
 
-    getCoins(): number {
+    getCoins(): bigint {
         return this.coins;
     }
 
-    setCoins(value: number): void {
-        if (!Number.isFinite(value) || value < 0) return;
-        const next = value >>> 0;
+    setCoins(value: bigint): void {
+        const next = value < 0n ? 0n : value;
         if (next === this.coins) return;
         this.coins = next;
         void this.persistMeta();
     }
 
-    addCoins(delta: number): void {
-        if (!Number.isFinite(delta) || delta === 0) return;
-        this.setCoins(Math.max(0, this.coins + Math.floor(delta)));
+    addCoins(delta: bigint): void {
+        if (delta === 0n) return;
+        this.setCoins(this.coins + delta);
     }
 
     // ----- Upgrades (Idle) -----
@@ -300,6 +300,16 @@ export class GameSave {
         } catch {
             return null;
         }
+    }
+
+    /** Wandelt einen persistierten Wert (bigint, number oder Ziffern-String) in bigint; null bei ungültig. */
+    private static toBigInt(v: unknown): bigint | null {
+        try {
+            if (typeof v === 'bigint') return v;
+            if (typeof v === 'number' && Number.isFinite(v)) return BigInt(Math.floor(v));
+            if (typeof v === 'string' && /^\d+$/.test(v)) return BigInt(v);
+        } catch { /* ignorieren */ }
+        return null;
     }
 
     private static reqToPromise<T>(req: IDBRequest<T>): Promise<T> {

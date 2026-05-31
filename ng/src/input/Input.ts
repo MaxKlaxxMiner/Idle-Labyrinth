@@ -60,5 +60,10 @@ export class Input {
     isPressed(...names: string[]): boolean {
         return names.some(n => this.pressed.has(n));
     }
+
+    /** Verwirft gepufferte Tastendruck-Flanken (z. B. während ein Overlay/Shop offen ist). */
+    clearEdges(): void {
+        this.edged.clear();
+    }
 }
 

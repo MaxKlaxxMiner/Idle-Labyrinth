@@ -1,114 +1,123 @@
 # Idle-Konzept
 
-Konzept und Umsetzungsstand fuer die Weiterentwicklung vom rein manuellen Labyrinth-Spiel
-zum Idle-Game. Dieses Dokument ist die massgebliche Referenz: es haelt sowohl die Vision
-als auch den tatsaechlichen Stand der Implementierung fest. Zahlenwerte (Kosten, Faktoren)
-sind weiterhin Vorschlaege und vor dem finalen Balancing offen.
+Konzept und Umsetzungsstand für die Weiterentwicklung vom rein manuellen Labyrinth-Spiel
+zum Idle-Game. Dieses Dokument ist die maßgebliche Referenz: es hält sowohl die Vision
+als auch den tatsächlichen Stand der Implementierung fest. Zahlenwerte (Kosten, Faktoren)
+sind weiterhin Vorschläge und vor dem finalen Balancing offen.
 
 ## Umsetzungsstand (Kurzfassung)
 
-Das Fundament steht: Modus-Strategie (Idle/Endless), Bot, Coin-Oekonomie, Upgrade-Registry,
-Shop-UI und ein konsolidierter IndexedDB-Save sind ueber klare Interfaces verdrahtet. Die
-eigentliche Idle-Tiefe fehlt aber noch weitgehend: von 11 definierten Upgrades hat aktuell
-nur `automover-random` eine spuerbare Wirkung; alle anderen sind kaufbare, persistierte
-Registry-Eintraege ohne Effekt.
+Das Fundament steht: Modus-Strategie (Idle/Endless), Bot, Coin-Ökonomie, Upgrade-Registry,
+Shop-UI und ein konsolidierter IndexedDB-Save sind über klare Interfaces verdrahtet. Von den
+11 definierten Upgrades wirken inzwischen `automover-random`, `automover-smart`,
+`automover-smarter` (gestaffelt, Variante A) sowie `player-speed`. Offen sind noch Borderline
+(Stufe 4/5), die Ratten-Kette, Drohnen, der Debug-Modus und der Soft-Schutz.
 
 Status der Implementierungsreihenfolge (Details siehe unten):
 
 | # | Schritt | Status |
 | --- | --- | --- |
-| 1 | Save-Refactor + Migration | Teilweise (IndexedDB statt JSON; kein mode/settings-Feld; Migration nur als Cleanup) |
+| 1 | Save-Refactor + Migration | Teilweise (IndexedDB statt JSON; kein mode-Feld; Migration nur als Cleanup) |
 | 2 | Coin-Belohnung + Wiederholungs-Decay | Umgesetzt |
 | 3 | Endless-Modus | Umgesetzt |
 | 4 | Debug-Modus (Cheats-Panel, Timewarp) | Offen |
-| 5 | Upgrade-Shop-UI | Umgesetzt (zusaetzliches Level-5-Gate) |
+| 5 | Upgrade-Shop-UI | Umgesetzt (zusätzliches Level-5-Gate) |
 | 6 | AutoMover-Random | Umgesetzt |
-| 7 | AutoMover-Smart | Abweichend (Logik steckt bereits im Random-Bot) |
-| 8 | AutoMover-Smarter | Abweichend (Logik steckt bereits im Random-Bot) |
+| 7 | AutoMover-Smart | Umgesetzt (gestaffelt über autoMoverTier) |
+| 8 | AutoMover-Smarter | Umgesetzt (gestaffelt über autoMoverTier) |
 | 9 | AutoMover-Borderline | Offen (fillBL/fillTR sind Dead Code) |
 | 10 | AutoMover-Borderline-Speed | Offen |
-| 11 | Spieler-Speed | Offen (Upgrade-Stufe wird nicht gelesen) |
+| 11 | Spieler-Speed (als "AutoMover-Speed") | Umgesetzt |
 | 12 | Ratten v1 | Offen |
 | 13 | Ratten-Erweiterungen | Offen |
 | 14 | Drohnen | Offen |
 | - | Soft-Schutz / HMAC | Offen |
 
-Drei zentrale Punkte, die vor dem Weiterbauen zu klaeren sind:
+Bereits entschiedene/erledigte Punkte:
 
-1. **Wirkungslose Kaeufe:** Nur `automover-random` wirkt. Spieler koennen `player-speed`,
-   `automover-smart` etc. kaufen, ohne eine Aenderung zu bemerken (Coins werden abgezogen,
-   Effekt null). Entscheidung noetig: nicht-implementierte Upgrades ausblenden oder als
-   "in Arbeit" sperren.
-2. **AutoMover-Stufen-Konflikt:** Der Random-Bot meidet bereits Sackgassen und priorisiert
-   die Luftlinie - unabhaengig vom Upgrade. Damit sind die Plan-Stufen 1 bis 3 verhaltensgleich
-   (siehe Upgrade-Kette AutoMover).
-3. **Persistenz weicht vom Plan ab:** Statt eines konsolidierten JSON-Saves wird IndexedDB
-   mit mehreren Stores pro Slot genutzt (siehe Persistenz). Die alte JSON-Skizze ist ueberholt.
+1. **AutoMover-Stufen (Variante A umgesetzt):** Stufe 1 (`random`) ist bewusst dumm; die
+   Cleverness (Sackgassen-Meidung, Luftlinie) ist an die höheren Stufen gebunden. Details
+   in der Upgrade-Kette AutoMover.
+2. **Ganzzahlige Ökonomie:** Coins und Kosten sind `bigint`; Kosten werden exakt ganzzahlig
+   und aufgerundet berechnet (kein Float, kein 2^32-Deckel, keine Float-Drift).
+3. **Persistenz:** IndexedDB mit mehreren Stores pro Slot (die alte JSON-Skizze ist überholt).
+
+Noch offen als Designentscheidung: wirkungslose Käufe der noch nicht implementierten
+Upgrades (Borderline, Ratten, Drohnen) - vor einer Veröffentlichung ausblenden oder sperren.
 
 ## Vision
 
-- Einstieg: Spieler loest die ersten Level vollstaendig von Hand und verdient dabei Coins.
+- Einstieg: Spieler löst die ersten Level vollständig von Hand und verdient dabei Coins.
   (Umgesetzt.)
-- Uebergang: Sobald genuegend Coins angespart sind, werden Upgrades sichtbar und kaufbar.
-  Das Spiel verlagert sich schrittweise vom aktiven Loesen hin zum Optimieren der
-  Loesungs-Automatik. (Teilweise: Shop und Sichtbarkeitsregel umgesetzt, aber nur ein
-  wirksames Automatik-Upgrade.)
-- Endgame: Mehrere Automatik-Schichten (AutoMover, Ratten, Drohnen) loesen Level
-  parallel/schneller. Spieler kuemmert sich um Upgrade-Strategie und Meta-Progression.
-  (Offen.)
+- Übergang: Sobald genügend Coins angespart sind, werden Upgrades sichtbar und kaufbar.
+  Das Spiel verlagert sich schrittweise vom aktiven Lösen hin zum Optimieren der
+  Lösungs-Automatik. (Umgesetzt: Shop, Sichtbarkeitsregel, der gestaffelte AutoMover und
+  AutoMover-Speed greifen.)
+- Endgame: Mehrere Automatik-Schichten (AutoMover, Ratten, Drohnen) lösen Level
+  parallel/schneller. Spieler kümmert sich um Upgrade-Strategie und Meta-Progression.
+  (Teilweise: AutoMover-Schicht steht, Ratten/Drohnen offen.)
 
 ## Spielmodi
 
 1. **Story / Idle** (Hauptmodus, intern `mode: 'idle'`)
    - Inkrementeller Levelaufstieg, plus Coin-/Upgrade-System.
-   - Verlauf wird nicht persistiert; jedes Level faengt frisch an.
+   - Verlauf wird nicht persistiert; jedes Level fängt frisch an.
    - Idle-Mechaniken werden hier freigeschaltet (Shop ab Level 5).
-   - Status: umgesetzt (Levelaufstieg, Coins, Shop, AutoMover-Random).
-2. **Endless** (intern `mode: 'endless'`, von Anfang an verfuegbar)
+   - Bei offenem Shop pausiert nur die Spieler-Eingabe; die Simulation (Bot, Level-Solve,
+     Coins) und das Rendering laufen im Hintergrund weiter.
+   - Status: umgesetzt (Levelaufstieg, Coins, Shop, AutoMover Stufe 1-3, AutoMover-Speed).
+2. **Endless** (intern `mode: 'endless'`, von Anfang an verfügbar)
    - Reiner Handmodus ohne Idle-Features, kein Coin-Verdienst.
-   - Levelschritte folgen `Consts.largeLevels` (groessere Spruenge), nicht inkrementell.
+   - Levelschritte folgen `Consts.largeLevels` (größere Sprünge), nicht inkrementell.
    - Eigener Save-Slot (`idle-laby-save-endless`); Verlauf wird pro Level persistiert,
-     beim Loesen so getrimmt, dass man beim Wiedereintritt einen Schritt vor dem Ziel steht.
-   - Bestwerte (moves, totalMoves) pro Level; Replay einzelner Level aus dem Stats-Menue.
+     beim Lösen so getrimmt, dass man beim Wiedereintritt einen Schritt vor dem Ziel steht.
+   - Bestwerte (moves, totalMoves) pro Level; Replay einzelner Level aus dem Stats-Menü.
    - Status: umgesetzt.
 3. **Debug** (nur localhost, automatisch erkannt)
    - Alles aus Story + direkte Levelwahl, freie Upgrade-Schaltung, Scan-/Cheat-Tools.
-   - **Cheats-Panel:** Button links oben oeffnet ein Overlay mit allen Stellschrauben:
+   - **Cheats-Panel:** Button links oben öffnet ein Overlay mit allen Stellschrauben:
      Level direkt setzen, Coins frei eintragen, jedes Upgrade einzeln an-/abschalten oder
-     Stufe waehlen, Bot-Logik forcen, Speed-Slider.
-   - **Timewarp:** Slider/Tasten x0.5 / x1 / x2 / x5 / x20 fuer Spielgeschwindigkeit
-     (RAF-Tick-Multiplikator). Hauptzweck: Balancing-Tests ueber laengere Zeit.
+     Stufe wählen, Bot-Logik forcen, Speed-Slider.
+   - **Timewarp:** Slider/Tasten x0.5 / x1 / x2 / x5 / x20 für Spielgeschwindigkeit
+     (RAF-Tick-Multiplikator). Hauptzweck: Balancing-Tests über längere Zeit.
    - **Test-Workflows:** "1000 Coins +", "Alle Upgrades freischalten", "Bot starten",
-     "Spielzeit ueberspringen".
+     "Spielzeit überspringen".
    - Status: offen. Der Modus-Typ kennt aktuell nur `idle | endless`. Dieser Modus ist
-     laut Reihenfolge das primaere Tuning-Tool fuer alle weiteren Upgrade-Stufen.
+     laut Reihenfolge das primäre Tuning-Tool für alle weiteren Upgrade-Stufen.
 
-## Coin-Oekonomie
+## Coin-Ökonomie
 
 Status: umgesetzt (`src/idle/Coins.ts`, angewandt in `IdleMode.onLevelSolved`).
 
 - Belohnung pro abgeschlossenem Level:
-  - `nodes = ((w-3)/2) * ((h-3)/2)` mit den geschaetzten Lab-Zellmassen `w/h` aus
+  - `nodes = ((w-3)/2) * ((h-3)/2)` mit den geschätzten Lab-Zellmaßen `w/h` aus
     `estimateLabyCells(level)` (Start 5x5, wachsen abwechselnd um 2 Richtung goldener Schnitt).
-  - `reward = floor(nodes / repeatCount + 0.98)`.
-  - Beispielwerte erste Loesung: Level 1 = 1, Level 2 = 2, Level 3 = 3, Level 4 = 6,
+  - `reward = floor(nodes / repeatCount + 0.98)`, geliefert als `bigint`.
+  - Beispielwerte erste Lösung: Level 1 = 1, Level 2 = 2, Level 3 = 3, Level 4 = 6,
     Level 5 = 8, Level 6 = 10, Level 7 = 15.
-- Wiederholungs-Decay: das `n`-te Loesen zahlt rund `1/n` der Ursprungsbelohnung. Das `+0.98`
+- Wiederholungs-Decay: das `n`-te Lösen zahlt rund `1/n` der Ursprungsbelohnung. Das `+0.98`
   garantiert mindestens 1 Coin, solange `nodes/n >= 0.02` (Level 1 ca. 50 Runden, Level 7
-  ca. 750 Runden). Wiederholungszaehler liegt pro Level im `clears`-Store.
-- Hinweis zur Abweichung: Der frueher skizzierte freie `factor` wurde durch die direkte
-  Knoten-Heuristik ersetzt; es gibt keine separate `factor`-Konstante.
+  ca. 750 Runden). Wiederholungszähler liegt pro Level im `clears`-Store.
+- Ganzzahligkeit: Coins (Wallet) und Belohnung sind `bigint` - kein 2^32-Deckel, keine
+  Float-Drift. Der früher skizzierte freie `factor` wurde durch die Knoten-Heuristik ersetzt
+  (keine separate `factor`-Konstante).
 - Persistenz: `coins` (meta-Store) und `clears[level]` (clears-Store), siehe Persistenz.
-- Sichtbarkeit von Upgrades: ein Upgrade erscheint im Shop, sobald `coins >= cost * 0.25`
-  (Viertel der noetigen Summe) und alle Vorbedingungen erfuellt sind.
+- Sichtbarkeit von Upgrades: klassenbasiert - ein Upgrade erscheint, sobald seine `requires`
+  erfüllt sind und es nicht ausgemaxt ist (siehe Sichtbarkeits-/Freischaltlogik).
 
 ## Upgrade-System
 
 Status: Registry, Sichtbarkeit und Kauf umgesetzt (`src/idle/Upgrades.ts`, `ShopView`,
-`Game.purchase`). Die Wirkung der einzelnen Upgrades ist bis auf `automover-random` offen.
+`Game.purchase`). Wirksam sind AutoMover Stufe 1-3 und AutoMover-Speed; Borderline (4/5),
+Ratten und Drohnen sind noch Registry-Einträge ohne Effekt.
 
-- Upgrades sind in Stufenketten organisiert: jedes hat optional `requires` (alle Vorgaenger
-  muessen besessen sein, sonst nicht sichtbar) und optional `maxLevel` (Stufen-Upgrade).
+- Upgrades sind in Stufenketten organisiert: jedes hat optional `requires` (alle Vorgänger
+  müssen besessen sein, sonst nicht sichtbar) und optional `maxLevel` (Stufen-Upgrade;
+  `Infinity` = unbegrenzt, ohne Angabe = einmalig). Eine optionale `describe(level)`-Funktion
+  liefert eine dynamische, stufenabhängige Beschreibung (z. B. Schritte/s bei AutoMover-Speed).
+- Stufenkosten: optionales `costGrowthPercent` (ganzzahliger Aufschlag in Prozent je besessener
+  Stufe). `upgradeCost(def, ownedLevel)` rechnet rein ganzzahlig und rundet auf:
+  `ceil(cost * (100+p)^owned / 100^owned)` als `bigint`.
 - Jeder Kauf reduziert `coins` um die Stufenkosten; gekaufte Stufen liegen im `upgrades`-Store.
 - Globaler Hotkey-Slot "Automatik an/aus": Leertaste toggelt im Idle-Modus den AutoMover,
   sofern `automover-random` gekauft ist.
@@ -117,58 +126,68 @@ Status: Registry, Sichtbarkeit und Kauf umgesetzt (`src/idle/Upgrades.ts`, `Shop
 
 | Stufe | Id | Kosten | requires | Verhalten | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `automover-random` | 10 | - | Zufallsbewegung, trifft per Zufall das Ziel | Umgesetzt |
-| 2 | `automover-smart` | 500 | random | Markiert Sackgassen als rot und meidet sie | Stub |
-| 3 | `automover-smarter` | 2000 | smart | Priorisiert die Luftlinie zum Ziel | Stub |
-| 4 | `automover-smarter-borderline` | 8000 | smarter | Markiert beim Erreichen des Rands ungueltige Innenbereiche | Offen |
-| 5 | `automover-smarter-borderline-speed` | 20000 | borderline | Rueckwege mit doppelter Geschwindigkeit | Offen |
+| 1 | `automover-random` | 10 | - | Rein zufällig unter begehbaren Nachbarn; meidet Sackgassen nur zu 50%, Trails zu 25% (grobe Laufrichtung) | Umgesetzt |
+| 2 | `automover-smart` | 500 | random | Meidet markierte Sackgassen/Trails strikt, nimmt das Ziel direkt wenn benachbart, läuft per `B` aus Sackgassen zurück | Umgesetzt |
+| 3 | `automover-smarter` | 2000 | smart | Zusätzlich Luftlinien-Priorisierung Richtung Ziel | Umgesetzt |
+| 4 | `automover-smarter-borderline` | 8000 | smarter | Markiert beim Erreichen des Rands ungültige Innenbereiche | Offen |
+| 5 | `automover-smarter-borderline-speed` | 20000 | borderline | Rückwege mit doppelter Geschwindigkeit | Offen |
 
-**Stufen-Konflikt (offene Entscheidung):** Der reale Bot (`Bot.getRandomStepDirection`)
-meidet bereits Sackgassen-/Trail-Farben und priorisiert die Luftlinie zum Ziel - und zwar
-immer, unabhaengig vom gekauften Upgrade-Level. Damit sind die geplanten Stufen 1 bis 3
-verhaltensgleich; ein Kauf von `automover-smart` oder `automover-smarter` aendert nichts.
-Zwei Wege:
+**Stufen-Staffelung (umgesetzt, Variante A):** Der Bot liest die höchste gekaufte
+AutoMover-Stufe über `BotHost.autoMoverTier()` (1=random ... 5=speed). Stufe 1 ist bewusst
+dumm: rein zufällige Wahl unter den begehbaren Nachbarn, mit nur grober Tendenz (Sackgassen
+zu 50%, Trails zu 25% gemieden); läuft notfalls per `B` zurück. Ab Stufe 2 (`smart`) werden
+markierte Sackgassen/Trails strikt gemieden und ein benachbartes Ziel direkt genommen, ab
+Stufe 3 (`smarter`) kommt die Luftlinien-Priorisierung dazu. Die 50/25-Werte sind als
+Konstanten in `Bot.getRandomStepDirection` justierbar.
 
-- (A) Plan-konform: Stufe 1 auf rein zufaellige Wahl zuruecknehmen und Sackgassen-Meidung
-  (Stufe 2) sowie Luftlinien-Prioritaet (Stufe 3) an die Upgrade-Stufe binden.
-- (B) Neu definieren: den jetzigen "guten" Bot als Stufe 1 belassen und fuer die Stufen 2/3
-  andere, spuerbare Verbesserungen festlegen.
+**Bot-Takt:** Der Bot bewegt sich im Takt von `BotHost.botStepIntervalMs()` (Basis
+`Consts.botStepIntervalMs` = 1000 ms, per AutoMover-Speed je Stufe x0.9). Die Tick-Logik ist
+deadline-basiert: verpasste Schritte (z. B. gedrosselter/ausgetabbter Tab) werden nachgeholt
+(Cap `Bot.MAX_CATCHUP_STEPS` = 1048576, ohne Fortschrittsverlust). Beim Aktivieren und bei
+Level-Start wird der Takt frisch angesetzt, sodass der erste Schritt nicht instant wirkt.
+Auch ein manueller Eingriff bei aktivem Bot (Richtungs-Step oder Undo) verschiebt den nächsten
+Bot-Schritt um ein Intervall (`bot.deferNextStep()`), damit der Bot nicht direkt nachzuckt.
 
 Die Borderline-Bausteine `fillBL`/`fillTR` existieren in `Bot.ts`, werden aber nicht
-ausgefuehrt: Der Hook `onForwardStep` wird nach jedem Vorwaerts-Schritt aus
-`Game.updatePlayer` aufgerufen, sein Body ist jedoch auskommentiert (No-op). Damit ist
-die gesamte Borderline-Logik aktuell Dead Code.
+ausgeführt: Der Hook `onForwardStep` wird nach jedem Vorwärts-Schritt aus
+`Game.updatePlayer` aufgerufen, sein Body ist jedoch auskommentiert (No-op). Damit ist die
+Borderline-Logik (Stufe 4/5) aktuell Dead Code.
 
-### Upgrade-Kette: Spieler-Speed
+### Upgrade-Kette: AutoMover-Speed (`player-speed`)
 
-- Id `player-speed`, Kosten 1000, requires `automover-random`, `maxLevel` 5.
-- Wirken soll auf die Bewegungsgeschwindigkeit allgemein (Hand wie Automatik).
-- Status: Stub. Die gekaufte Stufe wird nirgends gelesen; `Consts.botStepIntervalMs` ist
-  konstant (2000 ms). Konkrete Stufenwerte offen.
+- Id `player-speed`, Label "AutoMover-Speed", Basiskosten 100, requires `automover-random`,
+  `costGrowthPercent` 50 (+50% je Stufe: 100, 150, 225, 338, 507, ...), **unbegrenzt**
+  (`maxLevel: Infinity`).
+- Wirkung: verkürzt das Bot-Schrittintervall je Stufe um 10%
+  (`Consts.botStepSpeedupPerLevel` = 0.9): 900, 810, 729, 656, 590, ... ms.
+- Anzeige: dynamische Beschreibung in Schritte/s (aktuell -> nächste), z. B. "1.0 -> 1.1
+  Schritte/s"; das Label zeigt die zu kaufende Stufe ("(Stufe N)" = besessen + 1).
+- Die Handbewegung bleibt bewusst unverändert (so schnell wie man tippt bzw. OS-Autorepeat).
+- Status: umgesetzt (`Game.botStepIntervalMs()` liest die Stufe, der Bot nutzt sie im Tick).
 
 ### Upgrade-Kette: Ratten
 
 - Id `rat-count`, Kosten 10000, requires `automover-smarter`, `maxLevel` 8.
-- Jede Ratte soll selbststaendig nach `smart`-Logik laufen und parallel zum Spieler/AutoMover
+- Jede Ratte soll selbstständig nach `smart`-Logik laufen und parallel zum Spieler/AutoMover
   arbeiten; eigenes Sprite/Farbe, keine Kollision mit dem Spieler.
 - Status: offen. Keine Ratten-Entity, kein Renderer, keine Parallel-Logik.
 
 ### Upgrade-Kette: Ratten-Speed
 
-- Id `rat-speed`, Kosten 5000, requires `rat-count`, `maxLevel` 5. Analog Spieler-Speed,
-  nur fuer Ratten. Status: offen.
+- Id `rat-speed`, Basiskosten 5000, requires `rat-count`, `costGrowthPercent` 50, unbegrenzt
+  (`maxLevel: Infinity`). Analog AutoMover-Speed, nur für Ratten. Status: offen (Stub).
 
 ### Upgrade: `rat-teleporter`
 
 - Kosten 30000, requires `rat-count`.
-- Mit Upgrade erfolgt der Rueckweg einer Ratte zur letzten Verzweigung praktisch instant
-  (Teleport), auch wenn der aktuelle Bereich per Borderline-Logik als ungueltig markiert wird.
+- Mit Upgrade erfolgt der Rückweg einer Ratte zur letzten Verzweigung praktisch instant
+  (Teleport), auch wenn der aktuelle Bereich per Borderline-Logik als ungültig markiert wird.
 - Status: offen.
 
 ### Upgrade: `rat-borderline`
 
 - Kosten 60000, requires `rat-count` + `automover-smarter-borderline`.
-- Borderline-Logik analog zur AutoMover-Borderline, aber fuer Ratten.
+- Borderline-Logik analog zur AutoMover-Borderline, aber für Ratten.
 - Status: offen.
 
 ### Upgrade: Drohnen
@@ -182,17 +201,22 @@ die gesamte Borderline-Logik aktuell Dead Code.
 
 Status: umgesetzt (`ShopView.collectDisplayed` / `isVisible`).
 
-- Ein Upgrade ist sichtbar, wenn alle `requires` erfuellt sind (Vorgaenger besessen) und
-  `coins >= cost * 0.25`.
-- Faellt kein Upgrade unter diese Regel, wird als Fallback das guenstigste angezeigt.
-- Sichtbarer, aber zu teurer Eintrag wird mit deaktiviertem Kaufbutton dargestellt.
-- Abweichung/Erweiterung: Der Shop-Button selbst erscheint erst ab Level 5
-  (`shop.setEnabled(level >= 4)`, intern 0-basiert). Dieses Level-Gate steht nicht im
-  urspruenglichen Konzept und ist eine bewusste Designentscheidung.
+- Klassenbasiert: Ein Upgrade ist sichtbar, wenn alle `requires` erfüllt sind (Vorgänger
+  besessen) und es nicht ausgemaxt ist. Bei linearen Ketten (AutoMover) also immer genau die
+  nächste Stufe, bei Verzweigungen (Ratten nach `rat-count`) alle verfügbaren.
+- Rein aus dem persistierten Besitzstand abgeleitet: stabil über Reloads, ohne Coin-Schwellwert
+  und ohne erneutes Verstecken. (Die frühere 25%-Coin-Sichtbarkeitsregel wurde dadurch ersetzt.)
+- Anzeige nach Preis der nächsten Stufe aufsteigend sortiert; Kosten exakt ganzzahlig per
+  `upgradeCost(def, ownedLevel)` (siehe Upgrade-System).
+- Zu teurer Eintrag wird mit deaktiviertem Kaufbutton (`shop-row-locked`) dargestellt. Das
+  Overlay aktualisiert dynamische Teile (Coins, Kosten, Verfügbarkeit) in-place; ein DOM-Rebuild
+  erfolgt nur bei geänderter Liste (kein Hover-Flackern bei laufendem Bot).
+- Der Shop-Button erscheint erst ab Level 5 (`shop.setEnabled(level >= 4)`, intern 0-basiert) -
+  eine bewusste Designentscheidung.
 
 ## Persistenz (Ist-Stand: IndexedDB)
 
-Statt des frueher skizzierten konsolidierten JSON-Saves nutzt `GameSave` IndexedDB mit
+Statt des früher skizzierten konsolidierten JSON-Saves nutzt `GameSave` IndexedDB mit
 einer DB pro Slot. Diese Sektion beschreibt den realen Stand.
 
 - Eine DB pro Spielmodus-Slot: `idle-laby-save-idle`, `idle-laby-save-endless` (DB-Version 3).
@@ -204,89 +228,97 @@ einer DB pro Slot. Diese Sektion beschreibt den realen Stand.
   | `state` | `{ level: number }` unter Key `save` | beide Modi |
   | `histories` | `{ [level]: string }` (Eingabespur LRUD/B/M) | Endless |
   | `best` | `{ [level]: { moves, totalMoves } }` | Endless |
-  | `meta` | `{ coins: number }` unter Key `meta` | Idle |
+  | `meta` | `{ coins: bigint }` unter Key `meta` | Idle |
   | `upgrades` | `{ [upgradeId]: level }` | Idle |
-  | `clears` | `{ [level]: count }` (Wiederholungszaehler) | Idle |
+  | `clears` | `{ [level]: count }` (Wiederholungszähler) | Idle |
 
 - Alle Daten werden bei `init()` in den RAM geladen; Lese-Ops sind synchron, Schreib-Ops
   aktualisieren den RAM sofort und persistieren asynchron im Hintergrund.
 - Level ist intern 0-basiert und wird in der Anzeige mit `+1` dargestellt (HUD, Stats).
-- Noch nicht abgedeckt (gegenueber dem Konzept): Der **Modus** wird nicht persistiert,
-  sondern kommt als Constructor-Option (`mode: 'idle' | 'endless'`). Es gibt keinen
-  `settings`-Block (z. B. `speedTier`, `ratSpeedTier`) und keine Datenformat-Version auf
-  Datenebene (nur die IDB-Schema-Version). Diese Felder waeren noetig, falls Speed-Upgrades
-  oder ein Soft-Schutz folgen.
+- Coins werden als `bigint` gespeichert (IndexedDB structured clone unterstützt das nativ);
+  `GameSave.toBigInt` migriert alte `number`-Saves beim Laden verlustfrei.
+- Speed-Stufen liegen im `upgrades`-Store (`player-speed`), ein separater `settings`-Block ist
+  dafür nicht nötig.
+- Noch nicht abgedeckt (gegenüber dem Konzept): Der **Modus** wird nicht persistiert, sondern
+  kommt als Constructor-Option (`mode: 'idle' | 'endless'`). Es gibt keine Datenformat-Version
+  auf Datenebene (nur die IDB-Schema-Version) - relevant erst, falls Soft-Schutz/Signaturen folgen.
 
 ### Migration und Reset
 
-- Migration: `bootstrap()` raeumt einmalig die alte DB `idle-laby-cache` sowie die
+- Migration: `bootstrap()` räumt einmalig die alte DB `idle-laby-cache` sowie die
   localStorage-Keys `idle-laby-level` und `idle-laby-historyRaw` weg. Eine inhaltliche
-  Uebernahme alter Werte findet nicht statt (nur Cleanup).
-- Hard-Reset (Menue): loescht `idle-laby-cache-idle` und `idle-laby-save-idle` (nur der
+  Übernahme alter Werte findet nicht statt (nur Cleanup).
+- Hard-Reset (Menü): löscht `idle-laby-cache-idle` und `idle-laby-save-idle` (nur der
   Idle-Slot), Endless bleibt erhalten. Coins/Clears/Upgrades gehen dabei verloren.
-- Reset im Spiel (Taste R): setzt nur das aktuelle Level/den aktuellen Verlauf zurueck;
+- Reset im Spiel (Taste R): setzt nur das aktuelle Level/den aktuellen Verlauf zurück;
   Coins, Clears und Upgrades bleiben.
 
 ## Implementierungsreihenfolge (mit Status)
 
 1. **Save-Refactor** - Teilweise: IndexedDB-Multi-Store statt JSON-Blob, Wallet-Anzeige im
-   HUD vorhanden. Offen: persistiertes `mode`/`settings`-Feld, echte Datenuebernahme bei
-   Migration, Datenformat-Version.
-2. **Coin-Belohnung** inkl. Wiederholungs-Decay - Umgesetzt.
+   HUD vorhanden. Offen: persistiertes `mode`-Feld, echte Datenübernahme bei Migration,
+   Datenformat-Version.
+2. **Coin-Belohnung** inkl. Wiederholungs-Decay - Umgesetzt (bigint).
 3. **Endless-Modus** - Umgesetzt.
 4. **Debug-Modus** - Offen. localhost-Check, Cheats-Panel, Timewarp, Test-Workflows fehlen.
-5. **Upgrade-Shop-UI** - Umgesetzt (Floating-Button, Overlay, Kaufbutton, 25%-Regel,
-   zusaetzliches Level-5-Gate).
-6. **AutoMover-Random** - Umgesetzt (Leertaste-Toggle, Tick-getriebene Bewegung).
-7. **AutoMover-Smart** - Abweichend: Sackgassen-Meidung steckt generisch im Random-Bot,
-   ist nicht an das Upgrade gebunden.
-8. **AutoMover-Smarter** - Abweichend: Luftlinien-Prioritaet laeuft bereits in Stufe 1.
+5. **Upgrade-Shop-UI** - Umgesetzt (Floating-Button, Overlay, Kaufbutton, klassenbasierte
+   Sichtbarkeit + Preis-Sortierung, In-Place-Refresh, Level-5-Gate).
+6. **AutoMover-Random** - Umgesetzt (Leertaste-Toggle, deadline-getriebener Tick mit Catch-up).
+7. **AutoMover-Smart** - Umgesetzt: ab Stufe 2 strikte Sackgassen-/Trail-Meidung, Ziel-Grab,
+   `B`-Backtrack (über `autoMoverTier` gestaffelt).
+8. **AutoMover-Smarter** - Umgesetzt: ab Stufe 3 zusätzlich Luftlinien-Priorisierung.
 9. **AutoMover-Borderline** - Offen: `fillBL`/`fillTR` vorhanden, aber nicht aktiviert.
 10. **AutoMover-Borderline-Speed** - Offen.
-11. **Spieler-Speed-Upgrades** - Offen: Stufe wird nicht gelesen, Tick konstant.
+11. **AutoMover-Speed** (`player-speed`) - Umgesetzt: Bot-Intervall x0.9 je Stufe (Anzeige in
+    Schritte/s), Kosten +50% je Stufe, unbegrenzt; Handbewegung unverändert.
 12. **Ratten v1** - Offen.
 13. **Ratten-Erweiterungen** (Anzahl, Speed, Teleporter, Borderline) - Offen.
 14. **Drohnen** (optional) - Offen.
 
 ## Soft-Schutz / GitHub-Stern-Easter-Egg
 
-Status: offen (kein Code vorhanden). Da das Spiel Opensource ist und client-seitig laeuft,
+Status: offen (kein Code vorhanden). Da das Spiel Opensource ist und client-seitig läuft,
 gibt es keinen echten Cheat-Schutz - alles ist "security by friendliness".
 
 - HMAC-Signatur an alle wichtigen Save-Felder (coins, upgrades, level, bestStats).
-  Schluessel = `BASE_SECRET` plus `location.hostname`, sodass Saves nur auf der
+  Schlüssel = `BASE_SECRET` plus `location.hostname`, sodass Saves nur auf der
   Original-Domain valide sind.
 - Friendly-Hosts-Whitelist akzeptiert die produktive Domain (idle-laby.itch.io etc.) und
-  localhost. Itch.io nutzt CDN-Subdomains (z. B. `html-classic.itch.zone`), die mit hinein muessen.
+  localhost. Itch.io nutzt CDN-Subdomains (z. B. `html-classic.itch.zone`), die mit hinein müssen.
 - Auf der Original-Domain: bei manipuliertem Save freundlicher Hinweis, dass lokales Klonen
   zum Cheaten erlaubt ist und ein GitHub-Stern willkommen ist.
 - Auf localhost: Cheats explizit erlaubt (Debug-Modus), dezenter Banner.
 - Auf unbekannter Domain (Fork): Save als "forked instance" markieren.
 - Wichtig: kein Lockout. Manipulierte Saves werden weiterhin geladen, aber als
-  `legitimate: false` markiert. Voraussetzung dafuer waeren Signatur-/Marker-Felder im Save.
+  `legitimate: false` markiert. Voraussetzung dafür wären Signatur-/Marker-Felder im Save.
 
 ## Offene Punkte / Entscheidungen
 
-- **Wirkungslose Upgrades:** Nicht-implementierte Upgrades vorerst ausblenden oder als
-  "in Arbeit" sperren, damit keine Coins ohne Effekt ausgegeben werden.
-- **AutoMover-Stufen:** Variante A (rein-zufaellige Stufe 1, Logik an Stufen binden) oder
-  Variante B (jetzigen Bot als Stufe 1, Stufen 2/3 neu definieren). Siehe AutoMover-Kette.
-- **Persistenz-Modell:** Beim IndexedDB-Multi-Store bleiben (Plan-JSON ist ueberholt). Falls
-  ja: persistiertes `mode`-Feld und `settings` (speedTier, ratSpeedTier) ergaenzen?
-  Datenformat-Version fuer kuenftige Migrationen festlegen.
-- **Balancing:** Konkrete Kosten und Stufenwerte erst nach erster Spielbarkeit kalibrierbar.
-  Das Debug-Cheats-Panel ist dafuer das vorgesehene Tuning-Tool (noch offen).
+- **Noch wirkungslose Upgrades:** `automover-smarter-borderline`(+ -speed), die Ratten-Kette
+  und `drone` sind kaufbar, aber ohne Effekt. Vor einer Veröffentlichung ausblenden oder als
+  "in Arbeit" sperren, bis implementiert.
+- **Persistenz-Modell:** Bleibt IndexedDB-Multi-Store + bigint. Offen: persistiertes `mode`-Feld
+  und eine Datenformat-Version für künftige Migrationen.
+- **Balancing:** Konkrete Kosten/Stufenwerte erst nach erster Spielbarkeit kalibrierbar. Das
+  Debug-Cheats-Panel ist dafür das vorgesehene Tuning-Tool (noch offen). Tunbare Konstanten:
+  50/25-Tendenz im Bot, `botStepSpeedupPerLevel` (0.9), `costGrowthPercent` je Upgrade.
 - **Hotkey-Belegung:** Leertaste belegt "Automatik an/aus" (Idle). Weitere Tasten T, R, G,
   +/-/0 sind bereits vergeben - neue Aktionen brauchen freie Slots.
-- **Reset-Verhalten:** Hard-Reset loescht aktuell alle Idle-Daten (Coins/Clears weg).
+- **Reset-Verhalten:** Hard-Reset löscht aktuell alle Idle-Daten (Coins/Clears weg).
   Bewusst so, oder Coins/Decay teilweise behalten?
-- **Player/Bot-Synchronisation:** Bei aktivem Bot ist manuelle Eingabe nicht gesperrt -
-  beide bewegen denselben Spieler. Sperren oder bewusst parallel lassen?
-- **Ratten bei Borderline-Markierung:** Verlassen Ratten einen ungueltig markierten Bereich
+- **Player/Bot-Synchronisation (umgesetzt):** Bei aktivem Bot bleibt manuelle Eingabe bewusst
+  möglich - beide bewegen denselben Spieler. Ein manueller Step (Richtung oder Undo) verschiebt
+  den nächsten Bot-Schritt um ein Intervall, sodass der Bot nicht direkt nachzuckt. Bei offenem
+  Shop läuft der Bot im Hintergrund weiter; gepufferte Eingabe-Flanken werden dabei verworfen,
+  damit sie beim Schließen nicht nachfeuern.
+- **Offline-/Idle-Fortschritt:** Der Bot holt verpasste Schritte des aktuellen Levels nach
+  (Catch-up). Ein beschleunigter Mehr-Level-Fortschritt während langer Abwesenheit ist nicht
+  implementiert - der Level-Aufstieg passiert maximal einmal pro Frame.
+- **Ratten bei Borderline-Markierung:** Verlassen Ratten einen ungültig markierten Bereich
   automatisch? (Erst relevant, sobald Ratten existieren.)
-- **Drohnen-Mechanik:** Reichweite, Anzahl, Update-Tick, "durch Waende sehen" oder nicht.
-- **Soft-Schutz/HMAC:** Weiter zurueckstellen oder die Save-Struktur fruehzeitig auf
+- **Drohnen-Mechanik:** Reichweite, Anzahl, Update-Tick, "durch Wände sehen" oder nicht.
+- **Soft-Schutz/HMAC:** Weiter zurückstellen oder die Save-Struktur frühzeitig auf
   Signatur-/`legitimate`-Felder vorbereiten?
-- **Kleiner Robustheits-Fix:** Bot-Luftlinienvergleich nutzt vorzeichenbehaftete Differenzen
-  (`goal.x - player.x >= goal.y - player.y`). Funktioniert nur, weil Start oben-links und Ziel
-  unten-rechts liegen; `Math.abs` waere fuer kuenftige Layouts robuster.
+- **Bot-Luftlinie bei anderen Layouts:** Der Vergleich `goal.x - player.x >= goal.y - player.y`
+  ist bewusst vorzeichenbasiert (Start oben-links, Ziel unten-rechts) und im Code so kommentiert.
+  Für künftige Layouts mit Ziel oben/links wäre eine richtungsbewusste Wahl nötig.

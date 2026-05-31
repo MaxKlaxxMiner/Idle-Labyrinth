@@ -17,7 +17,7 @@ export class IdleMode implements GameModeStrategy {
         // Wiederholungszähler hochzählen und Coin-Belohnung gutschreiben.
         const repeats = host.save.incrementLevelClears(host.level);
         const reward = calculateLevelReward(host.level, repeats);
-        if (reward > 0) host.save.addCoins(reward);
+        if (reward > 0n) host.save.addCoins(reward);
     }
 
     usesHistory(): boolean {

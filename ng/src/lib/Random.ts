@@ -8,7 +8,8 @@ export class RandomMersenne {
         this.init(seed);
     }
 
-    private init(seed: number) {
+    /** (Neu-)Initialisiert den Generator mit einem Seed - in-place, ohne Neuallokation. */
+    init(seed: number) {
         this.m[0] = seed >>> 0;
         for (let i = 1; i < 624; i++) {
             const s = this.m[i - 1] ^ (this.m[i - 1] >>> 30);

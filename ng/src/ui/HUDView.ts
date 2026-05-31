@@ -3,9 +3,9 @@ export interface HUDState {
     moves: number;
     totalMoves: number;
     /** Optional, nur im Idle-Modus gesetzt. */
-    coins?: number;
+    coins?: bigint;
     /** Optional, erwartete Belohnung beim aktuellen Solve (nach Decay). */
-    coinsPending?: number;
+    coinsPending?: bigint;
     /**
      * Was Space im aktuellen Kontext tut.
      * - 'mark'      : Endless-Default (Marker setzen, neutrale Farbe)
@@ -48,6 +48,6 @@ export class HUDView {
 }
 
 /** Zahl mit Tausendertrennzeichen (en-US: Komma). */
-function fmt(n: number): string {
+function fmt(n: number | bigint): string {
     return n.toLocaleString('en-US');
 }

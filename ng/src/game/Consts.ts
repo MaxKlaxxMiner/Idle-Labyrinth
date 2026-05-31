@@ -1,8 +1,10 @@
 export const Consts = {
     labySeedBase: 123456,
     randomWalkRepeatDelayMs: 1000,
-    /** Mindestabstand zwischen zwei Bot-Schritten in ms (1 Schritt/Sek, später per Upgrade beschleunigbar). */
-    botStepIntervalMs: 2000,
+    /** Basis-Mindestabstand zwischen zwei Bot-Schritten in ms (per 'player-speed' beschleunigbar). */
+    botStepIntervalMs: 1000,
+    /** Faktor je 'player-speed'-Stufe auf das Schrittintervall (0.9 = je Stufe 10% kürzeres Intervall). */
+    botStepSpeedupPerLevel: 0.9,
     colors: {
         background: '#0b0b0b',
         wall: '#1f2937',

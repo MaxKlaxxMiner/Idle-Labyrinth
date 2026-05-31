@@ -19,10 +19,10 @@
  * @param level 0-basierter Level-Index (für spätere kurven-basierte Anpassung verfügbar)
  * @param repeatCount Wievielmal das Level bereits gelöst wurde, inklusive der gerade abgeschlossenen Lösung (>= 1)
  */
-export function calculateLevelReward(level: number, repeatCount: number): number {
-    if (repeatCount < 1) return 0;
+export function calculateLevelReward(level: number, repeatCount: number): bigint {
+    if (repeatCount < 1) return 0n;
     const nodes = estimateNodeCount(level);
-    return Math.max(0, Math.floor(nodes / repeatCount + 0.98));
+    return BigInt(Math.max(0, Math.floor(nodes / repeatCount + 0.98)));
 }
 
 /** Anzahl spielbarer Lab-Knoten ohne Rand: ((w-3)/2) * ((h-3)/2). */
