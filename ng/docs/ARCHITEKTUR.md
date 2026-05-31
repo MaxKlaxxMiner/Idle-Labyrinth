@@ -58,7 +58,6 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 
 ## Erweiterungspunkte
 
-- Labyrinth-Algorithmen: Alternative Generatoren (DFS, Wilson, Sidewinder) und Parameter (Korridorlänge, Verzweigungsgrad).
 - Bewegungsmodell: Optional weiches, kontinuierliches Bewegen mit Kollision vs. aktuelles Diskretmodell.
 - Idle-Subsystem: Ressourcenproduktion, Upgrades, Offline-Fortschritt, Metaprogression, Prestige.
 - UI/HUD: Panels für Stats/Upgrades, eigene Layer für Partikel/Effekte.

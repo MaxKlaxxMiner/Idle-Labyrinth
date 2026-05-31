@@ -1,6 +1,6 @@
 # Idle Labyrinth (TypeScript + Vite)
 
-Ein leichtgewichtiges Gerüst für ein webbasiertes Idle-/Labyrinth-Spiel. Implementiert in TypeScript, gebündelt mit Vite 6 und geliefert über den integrierten Dev-Server (HMR).
+Ein webbasiertes Idle-/Labyrinth-Spiel: erst löst man die Level von Hand, verdient dabei Coins und schaltet schrittweise eine Lösungs-Automatik (AutoMover) frei, die die Labyrinthe zunehmend selbst löst. Implementiert in TypeScript (strict), gebündelt mit Vite 6, Canvas-2D-Rendering, Spielstände in IndexedDB.
 
 ## Voraussetzungen
 
@@ -33,36 +33,51 @@ Ein leichtgewichtiges Gerüst für ein webbasiertes Idle-/Labyrinth-Spiel. Imple
    npm run typecheck
    ```
 
-## Steuerung & Spiellogik (aktuell)
+## Spielmodi
 
-- Bewegung: WASD oder Pfeiltasten; es wird in diskreten Schritten von Knoten zu Knoten bewegt (immer 2 Kacheln).
-- Ziel: Das blaue Feld erreichen, um zum nächsten Level zu wechseln.
-- Zoom: `+`/`-` zum stufenweisen Zoomen, `0` setzt auf Best-Fit.
-- Reset: `R` setzt auf den Startpunkt zurück; wenn bereits am Start, fragt ein Hard-Reset (Spielstand auf Level 1) nach Bestätigung.
-- Marker setzen: `Space` markiert die aktuelle Zelle.
+Im Hauptmenü wählbar:
+
+- **Idle** (Hauptmodus): inkrementeller Levelaufstieg. Jedes gelöste Level gibt Coins, mit Wiederholungs-Decay (mehrfaches Lösen desselben Levels zahlt absteigend). Ab Level 5 erscheint der **Shop** mit Upgrades - allen voran der **AutoMover** (Random -> Smart -> Smarter -> ...) und **AutoMover-Speed**. Per Leertaste schaltet man den gekauften AutoMover an/aus; er löst die Level dann selbst und verdient weiter Coins (auch bei offenem Shop). Der AutoMover ist pro Level deterministisch geseedet - gleiches Level bzw. Reset ergibt denselben Weg, also keine Zufallsvor-/-nachteile zwischen Spielern.
+- **Endless**: reiner Handmodus ohne Coins/Upgrades. Levelsprünge folgen `Consts.largeLevels` (größere Schritte statt +1). Der Lösungsverlauf wird pro Level gespeichert und beim Wiedereintritt abgespielt; Bestwerte (Züge) landen in der Statistik und sind von dort einzeln wiederholbar.
+- **Statistik**: aktueller Stand pro Modus plus Endless-Bestwerte (mit Replay-Option).
+- **Hard-Reset**: löscht nur den Idle-Spielstand (Endless bleibt erhalten).
+
+## Steuerung
+
+- Bewegung: `WASD` oder Pfeiltasten - diskrete Schritte von Knoten zu Knoten (je 2 Kacheln).
+- Ziel: das blaue Feld erreichen, um ins nächste Level zu wechseln.
+- Rückgängig: `Backspace` / `Entf` - genau ein Schritt (Autorepeat beim Halten).
+- Leertaste: im **Idle** AutoMover an/aus (sobald gekauft), im **Endless** Marker auf der aktuellen Zelle.
+- Zoom: `+` / `-` stufenweise, `0` = Best-Fit.
 - Auf Spieler zentrieren: `Enter`.
-- Rendermodus: `T` schaltet zwischen VSync (RAF) und Turbo um.
-- Pfad-Historie: Jeder Schritt wird als `L/R/U/D` gespeichert und als halbtransparenter, gelber Weg nachgezeichnet.
-- Rückgängig: `Backspace`/`Entf` macht genau einen Schritt rückgängig (bei gedrückt halten Autorepeat).
-- Fortschritt: Aktuelles Level wird in `localStorage` gespeichert (`idle-laby-level`), die Eingabespur unter `idle-laby-historyRaw`. Generierte Labyrinth-Daten landen in IndexedDB (`idle-laby-cache`).
+- Level zurücksetzen: `R` (fragt nach, wenn man nicht am Start steht).
+- Grid umschalten: `G`.
+- Shop / Menü: Shop-Button oben links (Idle, ab Level 5); `Esc` schließt den Shop bzw. führt zurück ins Hauptmenü.
 
 ## Projektstruktur
 
 - `src/` - TypeScript-Quellcode
-  - `index.ts` - Bootstrap (LabyCache init, Canvas finden, `Game` starten)
-  - `game/Game.ts` - Game-Loop, Eingabe, Kamera/Zoom, Levellogik, Persistenz
-  - `game/Consts.ts` - Farben, Zoomstufen, Größenkonstanten
+  - `index.ts` - Bootstrap: Caches/Saves initialisieren, Hauptmenü, `Game` je Modus starten
+  - `game/Game.ts` - Game-Loop, Eingabe, Kamera/Zoom, Level-/Solve-Logik; implementiert `BotHost`/`ModeHost`/`ShopHost`
+  - `game/Consts.ts` - Farben, Zoomstufen, Tilegrößen, `largeLevels`, Bot-Timing
+  - `game/Bot.ts` - AutoMover (Verhalten gestaffelt nach gekaufter Stufe), deterministischer RNG je Level
+  - `game/modes/` - `GameMode` (Strategy-Interface), `IdleMode`, `EndlessMode`
+  - `idle/Coins.ts` - Coin-Belohnung (bigint) inkl. Decay
+  - `idle/Upgrades.ts` - Upgrade-Registry und Kostenformel (ganzzahlig, bigint)
+  - `idle/ShopView.ts` - Shop-Overlay (klassenbasierte Sichtbarkeit, Preis-Sortierung, In-Place-Update)
   - `view/Camera.ts` - Kamerafolge mit Dead-Zone, Zoomverwaltung
   - `view/Level.ts` - Chunked-1px-Bitmap-Rendering mit skaliertem Blit
   - `view/PixBuffer256.ts` - 256x256 Pixelchunk (ImageData + Canvas)
   - `ui/HUDView.ts` - HUD-DOM-Element (`#hud`)
   - `input/Input.ts` - Tastatureingabe (Edge/Pressed/Schrittsteuerung)
+  - `menu/MainMenu.ts` - Hauptmenü (Modus-Auswahl, Statistik); `menu/MenuBackground.ts` - animierter Hintergrund
   - `lib/Laby.ts` - Deterministischer Labyrinth-Generator, `isFree(x,y)`, `pixWidth`/`pixHeight`
   - `lib/LabyCache.ts` - IndexedDB-Cache (Chunking) für große Labyrinth-Daten
+  - `lib/GameSave.ts` - Spielstand in IndexedDB, eine DB pro Modus-Slot
   - `lib/Random.ts` - Mersenne Twister und LCG
   - `lib/StringBuilder.ts` - effizienter String-Aufbau für History
-  - `styles.css` - Basis-Styling für HUD/Canvas
-- `index.html` - HTML-Template (Vite-Entry mit `<div id="hud">` und `<canvas id="game">`)
+  - `styles.css` - Basis-Styling für HUD/Canvas/Menü/Shop
+- `index.html` - HTML-Template (Vite-Entry)
 - `vite.config.ts` - Vite-Konfiguration (Port 5173, Alias `@/*`)
 - `tsconfig.json` - TypeScript-Konfiguration (strict, Alias `@/*` -> `src/*`)
 - `.gitignore` - übliche Ignorierungen
@@ -70,11 +85,12 @@ Ein leichtgewichtiges Gerüst für ein webbasiertes Idle-/Labyrinth-Spiel. Imple
 ## Technische Details
 
 - Rendering: Hintergrund-Canvas zeigt eine 1px-Kachelkarte aus 256x256-Chunks, skaliert per `drawImage`. Overlays (Spieler, Ziel, Marker, Pfad-Highlights) liegen im Vordergrund-Canvas. Smoothing ist deaktiviert.
-- Grid: Internes Zellenraster wird auf ein expandiertes Raster (`pixWidth` x `pixHeight`, intern `w*2-1` x `h*2-1`) abgebildet. `Laby` stellt `pixWidth`/`pixHeight` bereit; Consumer berechnen diese nicht selbst. `Laby.isFree(x,y)` signalisiert, ob Knoten/Kante/Zelle begehbar ist.
-- Generator: `Laby` erzeugt per Seed deterministische Labyrinthe; Levelgröße wächst abhängig vom Verhältnis (nähert den goldenen Schnitt an).
-- Cache: `LabyCache` speichert das zuletzt generierte Labyrinth in IndexedDB (Chunking in 8 MiB-Blöcken) und hält es zusätzlich im RAM für synchronen Zugriff.
-- Eingabe: `Input.consumeStepKey()` liefert pro Tastendruck genau einen diskreten Schritt; `consumeKey()` und `isPressed()` decken Edge- und Halte-Logik ab.
-- Persistenz: Aktuelles Level in `localStorage` (`idle-laby-level`), Eingabespur als `historyRaw` in `localStorage` (`idle-laby-historyRaw`), Labyrinth-Daten in IndexedDB.
+- Grid: Internes Zellenraster wird auf ein expandiertes Raster (`pixWidth` x `pixHeight`, intern `w*2-1` x `h*2-1`) abgebildet. `Laby` stellt `pixWidth`/`pixHeight` bereit; `Laby.isFree(x,y)` signalisiert, ob Knoten/Kante/Zelle begehbar ist.
+- Generator: `Laby` erzeugt per Seed deterministische Labyrinthe; die Levelgröße wächst abhängig vom Verhältnis (nähert den goldenen Schnitt an).
+- Cache: `LabyCache` speichert das zuletzt generierte Labyrinth in IndexedDB (Chunking) und hält es zusätzlich im RAM für synchronen Zugriff.
+- Persistenz: `GameSave` nutzt IndexedDB mit einer DB pro Modus-Slot (`idle-laby-save-idle`, `idle-laby-save-endless`): aktuelles Level, Coins (bigint), gekaufte Upgrade-Stufen, Wiederholungszähler sowie - im Endless - Verlauf und Bestwerte pro Level. Beim Start werden alte localStorage-Keys (`idle-laby-level`, `idle-laby-historyRaw`) und die alte Cache-DB aufgeräumt.
+- AutoMover: pro Level deterministisch geseedet (`RandomMersenne`); bewegt sich im festen Takt (`Consts.botStepIntervalMs`, per AutoMover-Speed verkürzt) und holt verpasste Schritte nach (Catch-up im ausgetabbten/gedrosselten Tab).
+- Eingabe: `Input.consumeStepKey()` liefert pro Tastendruck genau einen diskreten Schritt; `consumeKey()`/`isPressed()` decken Edge- und Halte-Logik ab.
 
 ## IDE/Editor-Hinweise
 
@@ -85,7 +101,7 @@ Ein leichtgewichtiges Gerüst für ein webbasiertes Idle-/Labyrinth-Spiel. Imple
 
 - Mitarbeiterleitfaden: `CLAUDE.md`
 - Architekturüberblick: `docs/ARCHITEKTUR.md`
-- Idle-Konzept: `docs/IDLE_PLAN.md`
+- Idle-Konzept und Umsetzungsstand: `docs/IDLE_PLAN.md`
 - Changelog: `CHANGELOG.md`
 - Versionierungsleitfaden: `VERSIONIERUNG.md`
 
@@ -95,10 +111,14 @@ Ein leichtgewichtiges Gerüst für ein webbasiertes Idle-/Labyrinth-Spiel. Imple
 
 ## Roadmap / Nächste Schritte
 
-- Idle-Mechanik ausbauen: Coins, Upgrade-Shop, AutoMover, Ratten, Drohnen, getrennte Modi (Story/Endless/Debug). Detailkonzept in `docs/IDLE_PLAN.md`.
-- Maze-Algorithmen vergleichen/variieren (z. B. DFS, Wilson, Sidewinder) und die Generator-Parameter exposed machen.
-- Persistenz verbessern (Versionierte Saves, Migrationspfad).
-- Tests für `Laby.isFree()` und Schrittlogik ergänzen.
+Umgesetzt: Modi (Idle/Endless), Coins + Wiederholungs-Decay, Upgrade-Shop, AutoMover Stufe 1-3 sowie AutoMover-Speed, IndexedDB-Spielstände (bigint). Detaillierter Stand in `docs/IDLE_PLAN.md`.
+
+Als Nächstes:
+
+- AutoMover-Borderline (Stufe 4/5), Ratten und Drohnen (siehe `docs/IDLE_PLAN.md`).
+- Debug-Modus (Cheats-Panel, Timewarp) als Balancing-Werkzeug.
+- Soft-Schutz / Save-Signatur sowie Save-Versionierung und Migrationspfad.
+- Tests für `Laby.isFree()` und die Schrittlogik ergänzen.
 
 ## Lizenz
 
