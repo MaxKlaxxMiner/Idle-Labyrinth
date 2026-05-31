@@ -10,7 +10,7 @@ Aktuelle Version laut `package.json`: `0.1.0`.
 
 ## Release-Checkliste (manuell)
 
-1. Changelog pflegen: Abschnitt „Unreleased“ in neue Version überführen und Datum setzen.
+1. Changelog pflegen: Abschnitt "Unreleased" in neue Version überführen und Datum setzen.
 2. Version erhöhen:
    - Variante A (npm erledigt Commit/Tag automatisch):
      - `npm version patch` | `npm version minor` | `npm version major`

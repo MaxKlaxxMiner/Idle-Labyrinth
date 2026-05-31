@@ -6,13 +6,13 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 
 - `src/index.ts`: Bootstrap. Lädt Styles, initialisiert `LabyCache` (IndexedDB), sucht das Canvas `#game`, instanziert `Game` und startet die Schleife. Legt zu Debugzwecken `window.__game` ab.
 - `src/game/Game.ts`: Zentrale Spielklasse (Game-Loop, Eingabe, Level-/Renderlogik, Persistenz, Pfad-Historie/Undo).
-- `src/game/Consts.ts`: Zentrale Konstanten (Farben, Zoomstufen, Tile-/Pad-Größen, „large levels").
+- `src/game/Consts.ts`: Zentrale Konstanten (Farben, Zoomstufen, Tile-/Pad-Größen, "large levels").
 - `src/view/Camera.ts`: Kameraverwaltung mit Dead-Zone-Follow, Zoom (Index in `Consts.zoom.steps`) und Best-Fit-Initialisierung.
 - `src/view/Level.ts`: Renderer auf einem Hintergrund-Canvas. Erzeugt ein 1px-Kachelbild aus 256x256-Chunks und blittet es skaliert mit `drawImage`. Zeichnet optional 1px-Gaps zwischen den Zellen.
 - `src/view/PixBuffer256.ts`: Wrapper um ein 256x256-`ImageData` + Canvas für direkte Uint32-Pixelmanipulation.
 - `src/ui/HUDView.ts`: Schreibt den HUD-Text in das DOM-Element `#hud`.
 - `src/input/Input.ts`: Tastatureingabe (gedrückt/edge-getriggert). `consumeStepKey()` liefert pro Tastendruck genau eine Richtung `L/R/U/D` (deterministische Priorität); `consumeKey()` für Edge-Tasten, `isPressed()` für Halte-Logik.
-- `src/lib/Laby.ts`: Deterministischer, seed-basierter Labyrinth-Generator. Stellt das „expandierte" Grid (`pixWidth` × `pixHeight`) sowie `isFree(x,y)` bereit.
+- `src/lib/Laby.ts`: Deterministischer, seed-basierter Labyrinth-Generator. Stellt das "expandierte" Grid (`pixWidth` x `pixHeight`) sowie `isFree(x,y)` bereit.
 - `src/lib/LabyCache.ts`: IndexedDB-Cache mit Chunking (8 MiB pro Chunk), hält das zuletzt generierte Level zusätzlich im RAM, damit `readLaby()` synchron nutzbar ist.
 - `src/lib/Random.ts`: Mersenne Twister + schneller LCG.
 - `src/lib/StringBuilder.ts`: Effizienter String-Aufbau (für `history`/`historyRaw`).
@@ -46,7 +46,7 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 - Resize passt die Bitmap-Auflösung an `devicePixelRatio` (max. `Consts.display.dprMax`) an.
 
 4) Labyrinth (`Laby`)
-- Interne Repräsentation im Zellenraster (komprimiert in `Uint32Array`, 2 Wandbits + 30 Bit Gruppen-ID pro Zelle); Ausgabe über das expandierte Raster (`pixWidth` × `pixHeight`, intern `w*2-1` × `h*2-1`).
+- Interne Repräsentation im Zellenraster (komprimiert in `Uint32Array`, 2 Wandbits + 30 Bit Gruppen-ID pro Zelle); Ausgabe über das expandierte Raster (`pixWidth` x `pixHeight`, intern `w*2-1` x `h*2-1`).
 - `isFree(x,y)` liefert für Knoten/Kanten/Zellen, ob begehbar ist; Intersections (gerade/gerade) sind Wände.
 - Generator baut deterministisch anhand `seed` ein zusammenhängendes Labyrinth (Wand-Stürze + Restdurchläufe), Endlagen werden komprimiert und in `LabyCache` gespeichert.
 
@@ -69,5 +69,5 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 ## Entwicklungs-Workflow
 
 - Scripts: `npm run dev`, `npm run build`, `npm run preview`, `npm run typecheck`.
-- TypeScript: `strict` aktiv; Pfad-Alias `@/*` → `src/*`.
+- TypeScript: `strict` aktiv; Pfad-Alias `@/*` -> `src/*`.
 - Vite-Dev-Server: Port 5173, HMR, `open: true`. Production-Build erzeugt Sourcemaps.

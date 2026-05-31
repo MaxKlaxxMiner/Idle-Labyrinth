@@ -1,6 +1,6 @@
 # Changelog
 
-Dieses Projekt folgt dem Format von „Keep a Changelog" und SemVer (siehe VERSIONIERUNG.md).
+Dieses Projekt folgt dem Format von "Keep a Changelog" und SemVer (siehe VERSIONIERUNG.md).
 
 ## [Unreleased]
 - Build: Wechsel von Webpack 5 auf Vite 6 (Dev-Server, Build, Preview).
