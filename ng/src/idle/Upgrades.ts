@@ -100,7 +100,7 @@ export const UPGRADES: ReadonlyArray<UpgradeDef> = [
         describe: (level) => {
             const sps = (lvl: number) =>
                 1000 / (Consts.botStepIntervalMs * Math.pow(Consts.botStepSpeedupPerLevel, lvl));
-            return `${sps(level).toFixed(1)} -> ${sps(level + 1).toFixed(1)} Schritte/s`;
+            return `${sps(level).toFixed(2)} -> ${sps(level + 1).toFixed(2)} Schritte/s`;
         },
     },
     {

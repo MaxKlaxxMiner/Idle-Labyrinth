@@ -136,9 +136,9 @@ export class Bot {
                 // Stufe 'smart': markierte Sackgassen und Trails strikt meiden.
                 if (isDeadend || isTrail) continue;
             } else {
-                // Stufe 'random': nur grobe Laufrichtung - Sackgassen zu 50%, Trails zu 25% meiden.
-                if (isDeadend && this.rng.next() < 0.5) continue;
-                if (isTrail && this.rng.next() < 0.25) continue;
+                // Stufe 'random': nur grobe Laufrichtung - Sackgassen zu 75%, Trails zu 50% meiden.
+                if (isDeadend && this.rng.next() < 0.75) continue;
+                if (isTrail && this.rng.next() < 0.5) continue;
             }
             valid.push(option.dir);
         }

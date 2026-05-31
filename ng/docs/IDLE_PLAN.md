@@ -126,7 +126,7 @@ Ratten und Drohnen sind noch Registry-Einträge ohne Effekt.
 
 | Stufe | Id | Kosten | requires | Verhalten | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `automover-random` | 10 | - | Rein zufällig unter begehbaren Nachbarn; meidet Sackgassen nur zu 50%, Trails zu 25% (grobe Laufrichtung) | Umgesetzt |
+| 1 | `automover-random` | 10 | - | Rein zufällig unter begehbaren Nachbarn; meidet Sackgassen zu 75%, Trails zu 50% (grobe Laufrichtung) | Umgesetzt |
 | 2 | `automover-smart` | 500 | random | Meidet markierte Sackgassen/Trails strikt, nimmt das Ziel direkt wenn benachbart, läuft per `B` aus Sackgassen zurück | Umgesetzt |
 | 3 | `automover-smarter` | 2000 | smart | Zusätzlich Luftlinien-Priorisierung Richtung Ziel | Umgesetzt |
 | 4 | `automover-smarter-borderline` | 8000 | smarter | Markiert beim Erreichen des Rands ungültige Innenbereiche | Offen |
@@ -135,9 +135,9 @@ Ratten und Drohnen sind noch Registry-Einträge ohne Effekt.
 **Stufen-Staffelung (umgesetzt, Variante A):** Der Bot liest die höchste gekaufte
 AutoMover-Stufe über `BotHost.autoMoverTier()` (1=random ... 5=speed). Stufe 1 ist bewusst
 dumm: rein zufällige Wahl unter den begehbaren Nachbarn, mit nur grober Tendenz (Sackgassen
-zu 50%, Trails zu 25% gemieden); läuft notfalls per `B` zurück. Ab Stufe 2 (`smart`) werden
+zu 75%, Trails zu 50% gemieden); läuft notfalls per `B` zurück. Ab Stufe 2 (`smart`) werden
 markierte Sackgassen/Trails strikt gemieden und ein benachbartes Ziel direkt genommen, ab
-Stufe 3 (`smarter`) kommt die Luftlinien-Priorisierung dazu. Die 50/25-Werte sind als
+Stufe 3 (`smarter`) kommt die Luftlinien-Priorisierung dazu. Die 75/50-Werte sind als
 Konstanten in `Bot.getRandomStepDirection` justierbar.
 
 **Bot-Takt:** Der Bot bewegt sich im Takt von `BotHost.botStepIntervalMs()` (Basis
@@ -160,7 +160,7 @@ Borderline-Logik (Stufe 4/5) aktuell Dead Code.
   (`maxLevel: Infinity`).
 - Wirkung: verkürzt das Bot-Schrittintervall je Stufe um 10%
   (`Consts.botStepSpeedupPerLevel` = 0.9): 900, 810, 729, 656, 590, ... ms.
-- Anzeige: dynamische Beschreibung in Schritte/s (aktuell -> nächste), z. B. "1.0 -> 1.1
+- Anzeige: dynamische Beschreibung in Schritte/s (aktuell -> nächste), z. B. "1.00 -> 1.11
   Schritte/s"; das Label zeigt die zu kaufende Stufe ("(Stufe N)" = besessen + 1).
 - Die Handbewegung bleibt bewusst unverändert (so schnell wie man tippt bzw. OS-Autorepeat).
 - Status: umgesetzt (`Game.botStepIntervalMs()` liest die Stufe, der Bot nutzt sie im Tick).
@@ -301,7 +301,7 @@ gibt es keinen echten Cheat-Schutz - alles ist "security by friendliness".
   und eine Datenformat-Version für künftige Migrationen.
 - **Balancing:** Konkrete Kosten/Stufenwerte erst nach erster Spielbarkeit kalibrierbar. Das
   Debug-Cheats-Panel ist dafür das vorgesehene Tuning-Tool (noch offen). Tunbare Konstanten:
-  50/25-Tendenz im Bot, `botStepSpeedupPerLevel` (0.9), `costGrowthPercent` je Upgrade.
+  75/50-Tendenz im Bot, `botStepSpeedupPerLevel` (0.9), `costGrowthPercent` je Upgrade.
 - **Hotkey-Belegung:** Leertaste belegt "Automatik an/aus" (Idle). Weitere Tasten T, R, G,
   +/-/0 sind bereits vergeben - neue Aktionen brauchen freie Slots.
 - **Reset-Verhalten:** Hard-Reset löscht aktuell alle Idle-Daten (Coins/Clears weg).
