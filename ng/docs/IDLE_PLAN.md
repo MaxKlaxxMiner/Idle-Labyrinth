@@ -220,7 +220,8 @@ Statt des früher skizzierten konsolidierten JSON-Saves nutzt `GameSave` Indexed
 einer DB pro Slot. Diese Sektion beschreibt den realen Stand.
 
 - Eine DB pro Spielmodus-Slot: `idle-laby-save-idle`, `idle-laby-save-endless` (DB-Version 3).
-  Labyrinth-Daten liegen getrennt in `idle-laby-cache-<slot>` (`LabyCache`).
+  Labyrinth-Daten werden nur im Endless gecacht (`idle-laby-cache-endless`, `LabyCache`); der
+  Idle-Modus generiert jedes Level deterministisch neu und nutzt keinen Labyrinth-Cache.
 - Sechs Object-Stores je Save-DB:
 
   | Store | Inhalt | Genutzt von |
@@ -248,8 +249,8 @@ einer DB pro Slot. Diese Sektion beschreibt den realen Stand.
   Datenstrukturen, werden die IndexedDB-DBs lokal manuell gelöscht. Auf Kompatibilität
   (Datenübernahme, Datenformat-Version) wird erst ab dem ersten Release geachtet. Die
   frühere Bootstrap-Aufräumlogik (alte DB/localStorage-Keys) wurde entfernt.
-- Hard-Reset (Menü): löscht `idle-laby-cache-idle` und `idle-laby-save-idle` (nur der
-  Idle-Slot), Endless bleibt erhalten. Coins/Clears/Upgrades gehen dabei verloren.
+- Hard-Reset (Menü): löscht `idle-laby-save-idle` (nur der Idle-Slot; Idle hat keinen
+  Labyrinth-Cache), Endless bleibt erhalten. Coins/Clears/Upgrades gehen dabei verloren.
 - Reset im Spiel (Taste R): setzt nur das aktuelle Level/den aktuellen Verlauf zurück;
   Coins, Clears und Upgrades bleiben.
 

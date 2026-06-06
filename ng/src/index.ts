@@ -5,8 +5,8 @@ import {LabyCache} from '@/lib/LabyCache';
 import {GameSave} from '@/lib/GameSave';
 import {MainMenu, MenuAction} from '@/menu/MainMenu';
 
-// Pro Spielmodus ein eigener Cache- und Save-Slot. BG-Laby läuft ohne Cache.
-const idleCache = new LabyCache('idle');
+// Save-Slot je Spielmodus. Labyrinth-Cache nur für Endless (Resume/große Level);
+// Idle generiert jedes Level deterministisch neu (Cache spart dort nichts).
 const endlessCache = new LabyCache('endless');
 const idleSave = new GameSave('idle');
 const endlessSave = new GameSave('endless');
@@ -14,7 +14,6 @@ const endlessSave = new GameSave('endless');
 async function bootstrap() {
     // Alle Slots parallel laden, damit der spätere Spielstart synchron lesen kann
     await Promise.all([
-        idleCache.init().catch(() => { /* ignorieren */ }),
         endlessCache.init().catch(() => { /* ignorieren */ }),
         idleSave.init().catch(() => { /* ignorieren */ }),
         endlessSave.init().catch(() => { /* ignorieren */ }),
@@ -59,7 +58,7 @@ async function bootstrap() {
             if (act === 'idle') {
                 menu.hide();
                 appRoot.style.display = '';
-                game = new Game(gameCanvas, {cache: idleCache, save: idleSave, mode: 'idle', onExit: returnToMenu});
+                game = new Game(gameCanvas, {save: idleSave, mode: 'idle', onExit: returnToMenu});
                 game.start();
                 (window as any).__game = game;
             } else if (act === 'endless') {
@@ -97,8 +96,8 @@ function collectStats() {
 }
 
 function clearIdleSaves() {
-    // Nur Idle-Slots verwerfen, Endless bleibt unangetastet.
-    const dbs = ['idle-laby-cache-idle', 'idle-laby-save-idle'];
+    // Nur den Idle-Save verwerfen, Endless bleibt unangetastet. Idle hat keinen Laby-Cache.
+    const dbs = ['idle-laby-save-idle'];
     for (const db of dbs) {
         try { indexedDB.deleteDatabase(db); } catch { /* ignorieren */ }
     }

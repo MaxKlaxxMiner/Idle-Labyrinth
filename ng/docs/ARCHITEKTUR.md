@@ -4,7 +4,7 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 
 ## Übersicht
 
-- `src/index.ts`: Bootstrap. Lädt Styles, initialisiert je Modus-Slot (`idle`/`endless`) einen `LabyCache` und einen `GameSave` (IndexedDB) parallel, zeigt das `MainMenu` und startet `Game` erst bei Modus-Auswahl mit `GameOptions` (`cache`/`save`/`mode`/`onExit`). Legt zu Debugzwecken `window.__game` ab.
+- `src/index.ts`: Bootstrap. Lädt Styles, initialisiert pro Modus einen `GameSave` (Slots `idle`/`endless`) und - nur für Endless - einen `LabyCache` (IndexedDB) parallel, zeigt das `MainMenu` und startet `Game` erst bei Modus-Auswahl mit `GameOptions` (`cache`/`save`/`mode`/`onExit`). Legt zu Debugzwecken `window.__game` ab.
 - `src/game/Game.ts`: Zentrale Spielklasse (Game-Loop, Eingabe, Level-/Renderlogik, Persistenz, Pfad-Historie/Undo).
 - `src/game/Consts.ts`: Zentrale Konstanten (Farben, Zoomstufen, Tile-/Pad-Größen, "large levels", Bot-Timing).
 - `src/game/Bot.ts`: AutoMover (Verhalten gestaffelt nach gekaufter Upgrade-Stufe, deterministischer RNG je Level).
@@ -28,7 +28,7 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 ## Laufzeitarchitektur
 
 1) Bootstrap (`index.ts`)
-- Lädt Styles, initialisiert pro Modus-Slot `LabyCache` und `GameSave` (`idle`/`endless`) parallel und zeigt das `MainMenu`.
+- Lädt Styles, initialisiert pro Modus einen `GameSave` (`idle`/`endless`) und - nur für Endless - einen `LabyCache` parallel und zeigt das `MainMenu`.
 - `Game` wird erst bei Modus-Auswahl mit `GameOptions` (`{cache, save, mode, onExit, replayLevel?}`) instanziert und gestartet; `onExit` (returnToMenu) disposed das laufende `Game` und zeigt das Menü erneut.
 
 2) Game-Loop und Zustände (`Game`)
@@ -39,7 +39,7 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 - Marker: `Space` markiert die aktuelle Zelle (in `markers: Set<number>`).
 - Levelgröße wächst über eine einfache Heuristik (Start 5x5, Zuwachs um 2, Verhältnis nähert goldenen Schnitt an). Seed: `Consts.labySeedBase + w + h + level`.
 - Spawn/Goal: Sucht jeweils die nächste freie Innenzelle nahe (1,1) bzw. (pixWidth-2, pixHeight-2).
-- Persistenz: `GameSave` (IndexedDB, eine DB pro Modus-Slot `idle-laby-save-idle`/`idle-laby-save-endless`) hält das aktuelle `level` (Store `state`), Coins (bigint), gekaufte Upgrade-Stufen und Wiederholungszähler sowie - im Endless - Verlauf und Bestwerte pro Level. Labyrinth-Daten in IndexedDB via `LabyCache` (Datenbank `idle-laby-cache-<slot>`, z. B. `idle-laby-cache-idle`). Kein `localStorage`.
+- Persistenz: `GameSave` (IndexedDB, eine DB pro Modus-Slot `idle-laby-save-idle`/`idle-laby-save-endless`) hält das aktuelle `level` (Store `state`), Coins (bigint), gekaufte Upgrade-Stufen und Wiederholungszähler sowie - im Endless - Verlauf und Bestwerte pro Level. Labyrinth-Daten werden nur im Endless gecacht (`LabyCache`, Datenbank `idle-laby-cache-endless`); der Idle-Modus generiert jedes Level deterministisch neu (kein Labyrinth-Cache). Kein `localStorage`.
 - Pfad-Historie: `history` als `StringBuilder` mit `L/R/U/D` (Vorwärtsschritt anhängen, Undo entfernen).
 - Eingabe-Rohspur: `historyRaw` behält alle Eingaben (`L/R/U/D`, `B` für Undo, `M` für Marker). Wird beim Level-Reset geleert.
 - Speicherung `historyRaw`: über `GameSave` im IndexedDB-Store `histories` (pro Level), nur in Modi mit `usesHistory()` (aktuell nur Endless). Bei Levelwechsel/Restart wird sofort ein leerer Verlauf gespeichert. Während des Spiels Autosave höchstens alle 1s und nur bei Änderungen. Beim Start wird ein vorhandener Verlauf geladen und vollständig abgespielt (Rekonstruktion von Weg, Markern und Undo-Historie).
@@ -55,7 +55,7 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 4) Labyrinth (`Laby`)
 - Interne Repräsentation im Zellenraster (komprimiert in `Uint32Array`, 2 Wandbits + 30 Bit Gruppen-ID pro Zelle); Ausgabe über das expandierte Raster (`pixWidth` x `pixHeight`, intern `w*2-1` x `h*2-1`).
 - `isFree(x,y)` liefert für Knoten/Kanten/Zellen, ob begehbar ist; Intersections (gerade/gerade) sind Wände.
-- Generator baut deterministisch anhand `seed` ein zusammenhängendes Labyrinth (Wand-Stürze + Restdurchläufe), Endlagen werden komprimiert und in `LabyCache` gespeichert.
+- Generator baut deterministisch anhand `seed` ein zusammenhängendes Labyrinth (Wand-Stürze + Restdurchläufe); Endlagen werden komprimiert und - sofern ein `LabyCache` übergeben wurde (nur Endless) - dort gespeichert.
 
 ## Koordinaten und Bewegung
 

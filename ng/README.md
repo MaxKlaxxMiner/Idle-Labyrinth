@@ -87,8 +87,8 @@ Im Hauptmenü wählbar:
 - Rendering: Hintergrund-Canvas zeigt eine 1px-Kachelkarte aus 256x256-Chunks, skaliert per `drawImage`. Overlays (Spieler, Ziel, Marker, Pfad-Highlights) liegen im Vordergrund-Canvas. Smoothing ist deaktiviert.
 - Grid: Internes Zellenraster wird auf ein expandiertes Raster (`pixWidth` x `pixHeight`, intern `w*2-1` x `h*2-1`) abgebildet. `Laby` stellt `pixWidth`/`pixHeight` bereit; `Laby.isFree(x,y)` signalisiert, ob Knoten/Kante/Zelle begehbar ist.
 - Generator: `Laby` erzeugt per Seed deterministische Labyrinthe; die Levelgröße wächst abhängig vom Verhältnis (nähert den goldenen Schnitt an).
-- Cache: `LabyCache` speichert das zuletzt generierte Labyrinth in IndexedDB (Chunking) und hält es zusätzlich im RAM für synchronen Zugriff.
-- Persistenz: `GameSave` nutzt IndexedDB mit einer DB pro Modus-Slot (`idle-laby-save-idle`, `idle-laby-save-endless`): aktuelles Level, Coins (bigint), gekaufte Upgrade-Stufen, Wiederholungszähler sowie - im Endless - Verlauf und Bestwerte pro Level. Beim Start werden alte localStorage-Keys (`idle-laby-level`, `idle-laby-historyRaw`) und die alte Cache-DB aufgeräumt.
+- Cache: Im Endless-Modus speichert `LabyCache` das zuletzt generierte Labyrinth in IndexedDB (Chunking) und hält es zusätzlich im RAM für synchronen Zugriff (Resume großer Level). Der Idle-Modus nutzt keinen Labyrinth-Cache und generiert jedes Level deterministisch neu.
+- Persistenz: `GameSave` nutzt IndexedDB mit einer DB pro Modus-Slot (`idle-laby-save-idle`, `idle-laby-save-endless`): aktuelles Level, Coins (bigint), gekaufte Upgrade-Stufen, Wiederholungszähler sowie - im Endless - Verlauf und Bestwerte pro Level.
 - AutoMover: pro Level deterministisch geseedet (`RandomMersenne`); bewegt sich im festen Takt (`Consts.botStepIntervalMs`, per AutoMover-Speed verkürzt) und holt verpasste Schritte nach (Catch-up im ausgetabbten/gedrosselten Tab).
 - Eingabe: `Input.consumeStepKey()` liefert pro Tastendruck genau einen diskreten Schritt; `consumeKey()`/`isPressed()` decken Edge- und Halte-Logik ab.
 
