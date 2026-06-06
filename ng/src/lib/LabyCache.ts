@@ -39,7 +39,7 @@ export class LabyCache {
             const chunks = tx.objectStore(LabyCache.STORE_CHUNKS);
             const meta = tx.objectStore(LabyCache.STORE_META);
             const metaRec = await LabyCache.reqToPromise<any>(meta.get('meta'));
-            if (!metaRec || !Number.isFinite(metaRec.length) || metaRec.length < 0 || !Number.isFinite(metaRec.level)) {
+            if (!metaRec || !Number.isFinite(metaRec.length) || metaRec.length <= 0 || !Number.isFinite(metaRec.level)) {
                 tx.abort();
                 return;
             }
@@ -80,7 +80,7 @@ export class LabyCache {
 
     /** Liest das Level aus dem RAM-Cache oder liefert null, wenn nicht vorhanden. */
     readLaby(level: number): Uint32Array | null {
-        if (this.currentLevel === (level >>> 0) && this.currentData) return this.currentData;
+        if (this.currentLevel === (level >>> 0) && this.currentData && this.currentData.length > 0) return this.currentData;
         return null;
     }
 

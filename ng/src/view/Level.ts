@@ -38,8 +38,7 @@ export class Level {
         // Ceil-Division via (n + 255) >> 8
         this.chunksX = Math.max(1, (this.pixW + 255) >> 8);
         this.chunksY = Math.max(1, (this.pixH + 255) >> 8);
-        // Lazy-Build: Platz reservieren, aber nicht erstellen
-        this.chunks = new Array(this.chunksX * this.chunksY).fill(null);
+        // Lazy-Build: das chunks-Array wird in clearHighlights() (unten) angelegt
         // Debug-Ausgabe: Pixelabmessungen und Chunkanzahl
         console.log(`Level: Bitmap-Größe ${this.pixW} x ${this.pixH} Pixel, Chunks ${this.chunksX} x ${this.chunksY}`);
         // Farben einmalig packen
@@ -82,7 +81,10 @@ export class Level {
         const cx = x >> 8;
         const cy = y >> 8;
         const idx = cy * this.chunksX + cx;
-        const chunk = this.chunks[idx] ?? this.createChunk(cx, cy);
+        // Reiner Lesezugriff: keinen Chunk allokieren. Nicht markierte Pixel entsprechen
+        // exakt der Basisfüllung aus createChunk (laby.isFree -> Hintergrund/Wand).
+        const chunk = this.chunks[idx];
+        if (!chunk) return this.laby.isFree(x, y) ? this.bgColor32 : this.wallColor32;
         return chunk.getPixel(x, y);
     }
 
@@ -256,10 +258,13 @@ export class Level {
             const test = new Uint32Array([0x11223344]);
             Level.isLittleEndian = new Uint8Array(test.buffer)[0] === 0x44;
         }
+        // Ergebnis ist bewusst ein signed int32-Bitmuster (kein >>> 0): es wird konsistent so
+        // in PixBuffer256.u32 geschrieben und mit getPixel (liest via |0) sowie den
+        // Farbkonstanten verglichen. Ein unsigned-Cast nur hier bräche die Vergleiche.
         if (Level.isLittleEndian) {
-            return (a << 24) | (b << 16) | (g << 8) | r >>> 0;
+            return (a << 24) | (b << 16) | (g << 8) | r;
         } else {
-            return (r << 24) | (g << 16) | (b << 8) | a >>> 0;
+            return (r << 24) | (g << 16) | (b << 8) | a;
         }
     }
 

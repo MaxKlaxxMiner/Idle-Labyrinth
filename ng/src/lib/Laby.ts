@@ -37,7 +37,9 @@ export class Laby {
         }
 
         function getId(pos: number): number {
-            return fields[pos] >> 2;
+            // unsigned Shift: id<<2 wird in einem Uint32Array gehalten; mit >> (arithmetisch)
+            // lieferten IDs >= 2^29 negative Werte. Roundtrip bleibt für id < 2^30 korrekt.
+            return fields[pos] >>> 2;
         }
 
         function setHWall(pos: number): number {
@@ -118,7 +120,7 @@ export class Laby {
         }
 
         const rnd = new RandomMersenne(seed);
-        let limit = Math.min(Math.max(width * height * 2, 100), 2000000);
+        const limit = Math.min(Math.max(width * height * 2, 100), 2000000);
         const fullSize = (width - 1) * (height - 1);
         const remainLimit = calcRemainLimit(limit, fullSize);
 

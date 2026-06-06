@@ -4,9 +4,15 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 
 ## Übersicht
 
-- `src/index.ts`: Bootstrap. Lädt Styles, initialisiert `LabyCache` (IndexedDB), sucht das Canvas `#game`, instanziert `Game` und startet die Schleife. Legt zu Debugzwecken `window.__game` ab.
+- `src/index.ts`: Bootstrap. Lädt Styles, initialisiert je Modus-Slot (`idle`/`endless`) einen `LabyCache` und einen `GameSave` (IndexedDB) parallel, zeigt das `MainMenu` und startet `Game` erst bei Modus-Auswahl mit `GameOptions` (`cache`/`save`/`mode`/`onExit`). Legt zu Debugzwecken `window.__game` ab.
 - `src/game/Game.ts`: Zentrale Spielklasse (Game-Loop, Eingabe, Level-/Renderlogik, Persistenz, Pfad-Historie/Undo).
-- `src/game/Consts.ts`: Zentrale Konstanten (Farben, Zoomstufen, Tile-/Pad-Größen, "large levels").
+- `src/game/Consts.ts`: Zentrale Konstanten (Farben, Zoomstufen, Tile-/Pad-Größen, "large levels", Bot-Timing).
+- `src/game/Bot.ts`: AutoMover (Verhalten gestaffelt nach gekaufter Upgrade-Stufe, deterministischer RNG je Level).
+- `src/game/modes/`: Modus-Strategie - `GameMode` (Interfaces `GameModeStrategy`/`ModeHost`), `IdleMode`, `EndlessMode`.
+- `src/idle/Coins.ts`: Coin-Belohnung (bigint) inkl. Wiederholungs-Decay.
+- `src/idle/Upgrades.ts`: Upgrade-Registry und Kostenformel (ganzzahlig, bigint).
+- `src/idle/ShopView.ts`: Shop-Overlay (klassenbasierte Sichtbarkeit, Preis-Sortierung, In-Place-Update).
+- `src/menu/MainMenu.ts`: Hauptmenü (Modus-Auswahl, Statistik, Hard-Reset); `src/menu/MenuBackground.ts`: animierter Labyrinth-Hintergrund.
 - `src/view/Camera.ts`: Kameraverwaltung mit Dead-Zone-Follow, Zoom (Index in `Consts.zoom.steps`) und Best-Fit-Initialisierung.
 - `src/view/Level.ts`: Renderer auf einem Hintergrund-Canvas. Erzeugt ein 1px-Kachelbild aus 256x256-Chunks und blittet es skaliert mit `drawImage`. Zeichnet optional 1px-Gaps zwischen den Zellen.
 - `src/view/PixBuffer256.ts`: Wrapper um ein 256x256-`ImageData` + Canvas für direkte Uint32-Pixelmanipulation.
@@ -14,6 +20,7 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 - `src/input/Input.ts`: Tastatureingabe (gedrückt/edge-getriggert). `consumeStepKey()` liefert pro Tastendruck genau eine Richtung `L/R/U/D` (deterministische Priorität); `consumeKey()` für Edge-Tasten, `isPressed()` für Halte-Logik.
 - `src/lib/Laby.ts`: Deterministischer, seed-basierter Labyrinth-Generator. Stellt das "expandierte" Grid (`pixWidth` x `pixHeight`) sowie `isFree(x,y)` bereit.
 - `src/lib/LabyCache.ts`: IndexedDB-Cache mit Chunking (8 MiB pro Chunk), hält das zuletzt generierte Level zusätzlich im RAM, damit `readLaby()` synchron nutzbar ist.
+- `src/lib/GameSave.ts`: Spielstand in IndexedDB, eine DB pro Modus-Slot (`idle-laby-save-<slot>`, 6 Object-Stores).
 - `src/lib/Random.ts`: Mersenne Twister + schneller LCG.
 - `src/lib/StringBuilder.ts`: Effizienter String-Aufbau (für `history`/`historyRaw`).
 - `index.html`: Vite-Entry mit `<div id="hud">` und `<canvas id="game">`.
@@ -21,28 +28,28 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 ## Laufzeitarchitektur
 
 1) Bootstrap (`index.ts`)
-- Lädt Styles, initialisiert `LabyCache` asynchron und ruft danach `new Game(canvas).start()` auf.
-- Wenn ein `#status`-Element existiert, dient es lediglich als Lade-Hinweis bis zum Start.
+- Lädt Styles, initialisiert pro Modus-Slot `LabyCache` und `GameSave` (`idle`/`endless`) parallel und zeigt das `MainMenu`.
+- `Game` wird erst bei Modus-Auswahl mit `GameOptions` (`{cache, save, mode, onExit, replayLevel?}`) instanziert und gestartet; `onExit` (returnToMenu) disposed das laufende `Game` und zeigt das Menü erneut.
 
 2) Game-Loop und Zustände (`Game`)
-- Zwei Modi: VSync (`requestAnimationFrame`) und Turbo (Timeout-basiert, ohne VSync). Umschalten über die Taste `T`.
+- RAF-getriebene Loop (`requestAnimationFrame`); siehe `start()` in `src/game/Game.ts`.
 - `update(dt)` + bedarfsorientiertes `render()` (invalidate via `needsRender`).
 - Eingabe: `Input.consumeStepKey()` liefert pro Tastendruck eine Richtung als Zeichen `L/R/U/D`; `consumeKey('r')`/`consumeKey(' ')`/`consumeKey('Enter')` etc. für Edge-Trigger; Halten-Logik via `isPressed()`.
 - Undo: `Backspace`/`Delete` macht den letzten Schritt rückgängig (Autorepeat funktioniert über wiederholte `keydown`-Events).
 - Marker: `Space` markiert die aktuelle Zelle (in `markers: Set<number>`).
 - Levelgröße wächst über eine einfache Heuristik (Start 5x5, Zuwachs um 2, Verhältnis nähert goldenen Schnitt an). Seed: `Consts.labySeedBase + w + h + level`.
 - Spawn/Goal: Sucht jeweils die nächste freie Innenzelle nahe (1,1) bzw. (pixWidth-2, pixHeight-2).
-- Persistenz: `level` in `localStorage` unter `idle-laby-level`. Labyrinth-Daten in IndexedDB via `LabyCache` (Datenbank `idle-laby-cache`).
+- Persistenz: `GameSave` (IndexedDB, eine DB pro Modus-Slot `idle-laby-save-idle`/`idle-laby-save-endless`) hält das aktuelle `level` (Store `state`), Coins (bigint), gekaufte Upgrade-Stufen und Wiederholungszähler sowie - im Endless - Verlauf und Bestwerte pro Level. Labyrinth-Daten in IndexedDB via `LabyCache` (Datenbank `idle-laby-cache-<slot>`, z. B. `idle-laby-cache-idle`). Kein `localStorage`.
 - Pfad-Historie: `history` als `StringBuilder` mit `L/R/U/D` (Vorwärtsschritt anhängen, Undo entfernen).
 - Eingabe-Rohspur: `historyRaw` behält alle Eingaben (`L/R/U/D`, `B` für Undo, `M` für Marker). Wird beim Level-Reset geleert.
-- Speicherung `historyRaw`: Schlüssel `idle-laby-historyRaw`. Bei Levelwechsel/Restart wird sofort ein leerer Verlauf gespeichert. Während des Spiels Autosave höchstens alle 3s und nur bei Änderungen. Beim Start wird ein vorhandener Verlauf geladen und vollständig abgespielt (Rekonstruktion von Weg, Markern und Undo-Historie).
+- Speicherung `historyRaw`: über `GameSave` im IndexedDB-Store `histories` (pro Level), nur in Modi mit `usesHistory()` (aktuell nur Endless). Bei Levelwechsel/Restart wird sofort ein leerer Verlauf gespeichert. Während des Spiels Autosave höchstens alle 1s und nur bei Änderungen. Beim Start wird ein vorhandener Verlauf geladen und vollständig abgespielt (Rekonstruktion von Weg, Markern und Undo-Historie).
 
 3) Rendering
 - Hintergrund-Canvas (`#game`): `Level` führt eine Chunked-Pixelkarte (1px = 1 Zelle), feste Chunkgröße 256x256, lazy erstellt beim ersten Bedarf. Farbwerte werden vorab als gepackte Uint32 abgelegt; Pixelmanipulation erfolgt direkt über `PixBuffer256.u32`.
 - Sichtbarkeit: aus Kamera-Offsets und Tile-Größe wird der sichtbare Pixelbereich berechnet; es werden nur die schneidenden Chunks aktualisiert und per skaliertem `drawImage` geblittet (`imageSmoothingEnabled = false`).
 - Gaps: Ab `tileSize >= Consts.sizes.gapThreshold` werden 1px-Linien in Hintergrundfarbe zwischen den Zellen gezeichnet (Overlay über den Blit).
 - Vordergrund-Canvas (`#game-fg`, zur Laufzeit erstellt): zeichnet Spieler, Ziel und Effekte. `pointer-events: none`, liegt mit `z-index: 1` über dem Hintergrund.
-- HUD: `HUDView` aktualisiert das DOM-Element `#hud` (Level, Moves, Tile, Modus, FPS, Steuerhilfen).
+- HUD: `HUDView` aktualisiert das DOM-Element `#hud` (Level, im Idle-Modus zusätzlich Coins inkl. erwarteter Belohnung, Moves/Gesamt-Moves sowie Steuerhilfen).
 - Resize passt die Bitmap-Auflösung an `devicePixelRatio` (max. `Consts.display.dprMax`) an.
 
 4) Labyrinth (`Laby`)

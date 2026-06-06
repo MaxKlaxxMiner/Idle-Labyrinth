@@ -12,15 +12,6 @@ const idleSave = new GameSave('idle');
 const endlessSave = new GameSave('endless');
 
 async function bootstrap() {
-    // Alte (vor-Slot) DBs einmalig wegräumen, damit keine Leichen zurückbleiben
-    for (const db of ['idle-laby-cache']) {
-        try { indexedDB.deleteDatabase(db); } catch { /* ignorieren */ }
-    }
-    // Bisherige localStorage-Keys aus der Vor-Save-Ära aufräumen
-    for (const key of ['idle-laby-level', 'idle-laby-historyRaw']) {
-        try { localStorage.removeItem(key); } catch { /* ignorieren */ }
-    }
-
     // Alle Slots parallel laden, damit der spätere Spielstart synchron lesen kann
     await Promise.all([
         idleCache.init().catch(() => { /* ignorieren */ }),

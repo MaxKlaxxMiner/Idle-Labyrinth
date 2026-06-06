@@ -17,7 +17,7 @@ Status der Implementierungsreihenfolge (Details siehe unten):
 
 | # | Schritt | Status |
 | --- | --- | --- |
-| 1 | Save-Refactor + Migration | Teilweise (IndexedDB statt JSON; kein mode-Feld; Migration nur als Cleanup) |
+| 1 | Save-Refactor + Migration | Teilweise (IndexedDB statt JSON; kein mode-Feld; Migration/Abwärtskompatibilität bewusst bis zum ersten Release zurückgestellt) |
 | 2 | Coin-Belohnung + Wiederholungs-Decay | Umgesetzt |
 | 3 | Endless-Modus | Umgesetzt |
 | 4 | Debug-Modus (Cheats-Panel, Timewarp) | Offen |
@@ -235,19 +235,19 @@ einer DB pro Slot. Diese Sektion beschreibt den realen Stand.
 - Alle Daten werden bei `init()` in den RAM geladen; Lese-Ops sind synchron, Schreib-Ops
   aktualisieren den RAM sofort und persistieren asynchron im Hintergrund.
 - Level ist intern 0-basiert und wird in der Anzeige mit `+1` dargestellt (HUD, Stats).
-- Coins werden als `bigint` gespeichert (IndexedDB structured clone unterstützt das nativ);
-  `GameSave.toBigInt` migriert alte `number`-Saves beim Laden verlustfrei.
+- Coins werden als `bigint` gespeichert (IndexedDB structured clone unterstützt das nativ).
 - Speed-Stufen liegen im `upgrades`-Store (`player-speed`), ein separater `settings`-Block ist
   dafür nicht nötig.
 - Noch nicht abgedeckt (gegenüber dem Konzept): Der **Modus** wird nicht persistiert, sondern
   kommt als Constructor-Option (`mode: 'idle' | 'endless'`). Es gibt keine Datenformat-Version
   auf Datenebene (nur die IDB-Schema-Version) - relevant erst, falls Soft-Schutz/Signaturen folgen.
 
-### Migration und Reset
+### Reset und Abwärtskompatibilität
 
-- Migration: `bootstrap()` räumt einmalig die alte DB `idle-laby-cache` sowie die
-  localStorage-Keys `idle-laby-level` und `idle-laby-historyRaw` weg. Eine inhaltliche
-  Übernahme alter Werte findet nicht statt (nur Cleanup).
+- Pre-Release: Es gibt bewusst KEINE Migration/Abwärtskompatibilität. Ändern sich
+  Datenstrukturen, werden die IndexedDB-DBs lokal manuell gelöscht. Auf Kompatibilität
+  (Datenübernahme, Datenformat-Version) wird erst ab dem ersten Release geachtet. Die
+  frühere Bootstrap-Aufräumlogik (alte DB/localStorage-Keys) wurde entfernt.
 - Hard-Reset (Menü): löscht `idle-laby-cache-idle` und `idle-laby-save-idle` (nur der
   Idle-Slot), Endless bleibt erhalten. Coins/Clears/Upgrades gehen dabei verloren.
 - Reset im Spiel (Taste R): setzt nur das aktuelle Level/den aktuellen Verlauf zurück;
@@ -256,8 +256,8 @@ einer DB pro Slot. Diese Sektion beschreibt den realen Stand.
 ## Implementierungsreihenfolge (mit Status)
 
 1. **Save-Refactor** - Teilweise: IndexedDB-Multi-Store statt JSON-Blob, Wallet-Anzeige im
-   HUD vorhanden. Offen: persistiertes `mode`-Feld, echte Datenübernahme bei Migration,
-   Datenformat-Version.
+   HUD vorhanden. Offen (bewusst bis zum ersten Release zurückgestellt): persistiertes
+   `mode`-Feld, Datenübernahme/Abwärtskompatibilität, Datenformat-Version.
 2. **Coin-Belohnung** inkl. Wiederholungs-Decay - Umgesetzt (bigint).
 3. **Endless-Modus** - Umgesetzt.
 4. **Debug-Modus** - Offen. localhost-Check, Cheats-Panel, Timewarp, Test-Workflows fehlen.

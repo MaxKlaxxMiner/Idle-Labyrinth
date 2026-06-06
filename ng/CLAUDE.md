@@ -22,8 +22,6 @@ Kurzleitfaden für die Zusammenarbeit in diesem Projekt. Ersetzt das frühere AG
 - Commit-Prefix: jede Nachricht beginnt mit `laby: `.
 - Zeitpunkt: erst committen, nachdem die stabile Funktionsweise direkt oder indirekt bestätigt wurde.
 - Keine Änderungen an der Git-Repo-Konfiguration (Name/E-Mail).
-- Agent-Commits nutzen eine Per-Commit-Identität:
-  - `git -c user.name="codex" -c user.email="" commit -m "laby: <message>" --author="codex <>"`
 
 ## Projektüberblick
 - Stack: TypeScript (strict) + Vite 6, Canvas-2D-Rendering, IndexedDB-Cache für Labyrinth-Daten.

@@ -4,12 +4,16 @@ Dieses Projekt folgt dem Format von "Keep a Changelog" und SemVer (siehe VERSION
 
 ## [Unreleased]
 - Build: Wechsel von Webpack 5 auf Vite 6 (Dev-Server, Build, Preview).
+- Spielmodi: Idle und Endless über Modus-Strategie (`src/game/modes/`); Hauptmenü mit Modus-Auswahl, Statistik-Ansicht und Hard-Reset (`src/menu/`).
+- Ökonomie: Coin-Belohnung mit Wiederholungs-Decay als `bigint` (`src/idle/Coins.ts`).
+- Upgrade-Shop: Registry und Kostenformel (`src/idle/Upgrades.ts`), Overlay mit klassenbasierter Sichtbarkeit und Preis-Sortierung (`src/idle/ShopView.ts`); Shop ab Level 5.
+- AutoMover: deterministischer, geseedter Bot (`src/game/Bot.ts`) mit Stufen 1-3 (random/smart/smarter) sowie AutoMover-Speed.
 - Cache: IndexedDB-basierter `LabyCache` für sehr große Labyrinth-Daten (Chunking).
 - Rendering: Chunked-1px-Bitmap (`PixBuffer256`, 256x256) mit skaliertem Blit; optionale 1px-Gaps zwischen Zellen.
-- UI: HUD in eigenes DOM-Element `#hud` ausgelagert; Anzeige von Tile-Größe, Rendermodus und FPS.
-- Steuerung: `Space` setzt Marker, `Enter` zentriert auf Spieler, `T` schaltet zwischen VSync und Turbo.
-- Persistenz: Eingabespur `historyRaw` (`L/R/U/D/B/M`) in `localStorage`, Autosave gedrosselt.
-- Doku: Architekturübersicht ergänzt (`docs/ARCHITEKTUR.md`), Rendering-Leitfaden (`docs/RENDERING_TODO.md`), `CLAUDE.md` als Mitarbeiterleitfaden.
+- UI: HUD in eigenes DOM-Element `#hud` ausgelagert; Anzeige von Level, Coins (inkl. erwarteter Belohnung im Idle-Modus), Moves/Gesamt-Moves und Steuerhilfen.
+- Steuerung: `Space` setzt im Endless einen Marker bzw. toggelt im Idle den AutoMover, `Enter` zentriert auf Spieler.
+- Persistenz: konsolidierter IndexedDB-Save (`GameSave`, eine DB pro Modus-Slot, 6 Stores: state/histories/best/meta/upgrades/clears); Coins als `bigint`. Eingabespur `historyRaw` (`L/R/U/D/B/M`) nur im Endless pro Level, Autosave gedrosselt.
+- Doku: Architekturübersicht (`docs/ARCHITEKTUR.md`) und Idle-Konzept (`docs/IDLE_PLAN.md`); `CLAUDE.md` als Mitarbeiterleitfaden.
 
 ## [0.1.0] - 2025-08-30
 - Initiales Gerüst: TypeScript + Webpack 5 + DevServer.

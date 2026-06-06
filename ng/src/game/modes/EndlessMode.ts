@@ -10,8 +10,11 @@ export class EndlessMode implements GameModeStrategy {
     readonly id = 'endless' as const;
 
     computeNextLevel(currentLevel: number): number {
+        // Obergrenze: nicht über den höchsten largeLevels-Eintrag hinaus zählen,
+        // sonst liefe die Schleife (kein passender Folgewert mehr im Set) endlos.
+        const max = Math.max(...Consts.largeLevels);
         let next = currentLevel + 1;
-        while (!Consts.largeLevels.has(next + 1)) next++;
+        while (next + 1 <= max && !Consts.largeLevels.has(next + 1)) next++;
         return next;
     }
 

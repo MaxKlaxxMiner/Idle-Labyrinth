@@ -67,8 +67,8 @@ export class GameSave {
             const metaRec = await GameSave.reqToPromise<any>(
                 tx.objectStore(GameSave.STORE_META).get(GameSave.KEY_META),
             );
-            const loadedCoins = GameSave.toBigInt(metaRec?.coins);
-            if (loadedCoins !== null && loadedCoins >= 0n) {
+            const loadedCoins = metaRec?.coins;
+            if (typeof loadedCoins === 'bigint' && loadedCoins >= 0n) {
                 this.coins = loadedCoins;
             }
 
@@ -300,16 +300,6 @@ export class GameSave {
         } catch {
             return null;
         }
-    }
-
-    /** Wandelt einen persistierten Wert (bigint, number oder Ziffern-String) in bigint; null bei ungültig. */
-    private static toBigInt(v: unknown): bigint | null {
-        try {
-            if (typeof v === 'bigint') return v;
-            if (typeof v === 'number' && Number.isFinite(v)) return BigInt(Math.floor(v));
-            if (typeof v === 'string' && /^\d+$/.test(v)) return BigInt(v);
-        } catch { /* ignorieren */ }
-        return null;
     }
 
     private static reqToPromise<T>(req: IDBRequest<T>): Promise<T> {

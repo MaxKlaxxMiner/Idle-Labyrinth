@@ -5,13 +5,29 @@ export class Input {
     constructor() {
         this.onKeyDown = this.onKeyDown.bind(this);
         this.onKeyUp = this.onKeyUp.bind(this);
+        this.onBlur = this.onBlur.bind(this);
+        this.onVisibilityChange = this.onVisibilityChange.bind(this);
         window.addEventListener('keydown', this.onKeyDown);
         window.addEventListener('keyup', this.onKeyUp);
+        window.addEventListener('blur', this.onBlur);
+        document.addEventListener('visibilitychange', this.onVisibilityChange);
     }
 
     dispose() {
         window.removeEventListener('keydown', this.onKeyDown);
         window.removeEventListener('keyup', this.onKeyUp);
+        window.removeEventListener('blur', this.onBlur);
+        document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    }
+
+    /** Bei Fokusverlust gehaltene Tasten und gepufferte Flanken verwerfen (kein Stuck-Key). */
+    private onBlur() {
+        this.pressed.clear();
+        this.edged.clear();
+    }
+
+    private onVisibilityChange() {
+        if (document.hidden) this.onBlur();
     }
 
     private normKey(e: KeyboardEvent): string {
