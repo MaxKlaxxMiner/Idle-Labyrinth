@@ -75,6 +75,9 @@ export const UPGRADES: ReadonlyArray<UpgradeDef> = [
         cost: 2000,
         requires: ['automover-smart'],
     },
+    // Noch nicht implementiert (funktionslos) - bis zur Umsetzung auskommentiert, damit diese
+    // Upgrades nicht kaufbar im Shop erscheinen. Siehe docs/IDLE_PLAN.md.
+    /*
     {
         id: 'automover-smarter-borderline',
         label: 'AutoMover (Borderline)',
@@ -89,6 +92,7 @@ export const UPGRADES: ReadonlyArray<UpgradeDef> = [
         cost: 20000,
         requires: ['automover-smarter-borderline'],
     },
+    */
     {
         id: 'player-speed',
         label: 'AutoMover-Speed',
@@ -96,13 +100,16 @@ export const UPGRADES: ReadonlyArray<UpgradeDef> = [
         cost: 100,
         requires: ['automover-random'],
         maxLevel: Infinity,
-        costGrowthPercent: 50,
+        costGrowthPercent: 11,
         describe: (level) => {
             const sps = (lvl: number) =>
                 1000 / (Consts.botStepIntervalMs * Math.pow(Consts.botStepSpeedupPerLevel, lvl));
             return `${sps(level).toFixed(2)} -> ${sps(level + 1).toFixed(2)} Schritte/s`;
         },
     },
+    // Noch nicht implementiert (funktionslos) - bis zur Umsetzung auskommentiert, damit diese
+    // Upgrades nicht kaufbar im Shop erscheinen. Siehe docs/IDLE_PLAN.md.
+    /*
     {
         id: 'rat-count',
         label: 'Ratten',
@@ -141,6 +148,7 @@ export const UPGRADES: ReadonlyArray<UpgradeDef> = [
         cost: 150000,
         requires: ['rat-borderline'],
     },
+    */
 ];
 
 /** Index für O(1)-Lookup. */

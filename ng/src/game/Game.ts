@@ -57,7 +57,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
     readonly player = {x: 1, y: 1, r: 0.35};
     readonly goal = {x: 0, y: 0};
     moves = 0;       // "echte" Pfadlänge: zählt bei Undo wieder runter
-    totalMoves = 0;  // Gesamtschritte inkl. Rückwärts und Marker, nur aufwärts
+    totalMoves = 0;  // Gesamtschritte inkl. Rückwärts (ohne Marker), nur aufwärts
     history = new StringBuilder();
     private historyRaw = new StringBuilder();   // wird nur im Endless-Modus benutzt (persistiert pro Level)
     private replaying = false;                  // aktiv während des Replays beim Level-Start (keine Persistierung)
@@ -418,6 +418,8 @@ export class Game implements BotHost, ModeHost, ShopHost {
         }
         this.hud.set({
             level: this.level + 1,
+            pixW: this.laby.pixWidth,
+            pixH: this.laby.pixHeight,
             moves: this.moves,
             totalMoves: this.totalMoves,
             coins,
@@ -625,8 +627,8 @@ export class Game implements BotHost, ModeHost, ShopHost {
     updatePlayer(inputKey: 'L' | 'R' | 'U' | 'D' | 'B' | 'M') {
         this.followPaused = false;
         if (inputKey === 'M') {
+            // Marker-Toggle zählt bewusst NICHT als Zug (weder moves noch totalMoves).
             this.toggleMarkerAt(this.player.x, this.player.y);
-            this.totalMoves++;
             this.recordRawInput('M');
             return;
         }

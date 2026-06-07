@@ -1,5 +1,8 @@
 export interface HUDState {
     level: number;
+    /** Pixel-Maße des aktuellen Labyrinths (pixWidth x pixHeight), optional. */
+    pixW?: number;
+    pixH?: number;
     moves: number;
     totalMoves: number;
     /** Optional, nur im Idle-Modus gesetzt. */
@@ -26,6 +29,9 @@ export class HUDView {
 
     set(state: HUDState) {
         if (!this.el) return;
+        const sizePart = (state.pixW !== undefined && state.pixH !== undefined)
+            ? ` (${state.pixW} x ${state.pixH})`
+            : '';
         let coinsPart = '';
         if (state.coins !== undefined) {
             const pending = state.coinsPending !== undefined ? ` (+${fmt(state.coinsPending)})` : '';
@@ -39,7 +45,7 @@ export class HUDView {
         } else if (state.spaceAction === 'active') {
             spacePart = '  <span class="hud-bot hud-bot-on">AutoMover: Space (running)</span>';
         }
-        const html = `Level: ${fmt(state.level)}${coinsPart}  Moves: ${fmt(state.moves)} / ${fmt(state.totalMoves)}  |  Move: WASD/↑↓←→  Reset: R${spacePart}  Center: Enter  Zoom: +/-, 0 fit`;
+        const html = `Level: ${fmt(state.level)}${sizePart}${coinsPart}  Moves: ${fmt(state.moves)} / ${fmt(state.totalMoves)}  |  Move: WASD/↑↓←→  Reset: R${spacePart}  Center: Enter  Zoom: +/-, 0 fit`;
         if (html !== this.last) {
             this.el.innerHTML = html;
             this.last = html;
