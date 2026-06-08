@@ -1,5 +1,5 @@
-import {Consts} from '@/game/Consts';
-import {GameModeStrategy, ModeHost} from './GameMode';
+import { GameModeStrategy, ModeHost } from "@/game/modes/GameMode";
+import { Consts } from "@/game/Consts";
 
 /**
  * Endless-Modus: Sprünge entlang Consts.largeLevels. Verlauf wird pro Level

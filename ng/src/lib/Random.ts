@@ -51,19 +51,3 @@ export class RandomMersenne {
 		return this.nextInt() / 4294967296;
 	}
 }
-
-export class RandomFast {
-	n: number;
-
-	constructor(seed: number) {
-		this.n = seed >>> 0;
-	}
-
-	nextInt() {
-		return this.n = this.n * 16807 >>> 0;
-	}
-
-	next(): number {
-		return this.nextInt() / 4294967296;
-	}
-}

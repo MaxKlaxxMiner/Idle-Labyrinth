@@ -84,7 +84,7 @@ export class GameSave {
 			await GameSave.cursorEach(tx.objectStore(GameSave.STORE_BEST), (key, value) => {
 				const k = Number(key);
 				if (Number.isFinite(k) && value && Number.isFinite(value.moves) && Number.isFinite(value.totalMoves)) {
-					this.bests.set(k, {moves: value.moves >>> 0, totalMoves: value.totalMoves >>> 0});
+					this.bests.set(k, { moves: value.moves >>> 0, totalMoves: value.totalMoves >>> 0 });
 				}
 			});
 
@@ -151,10 +151,10 @@ export class GameSave {
 		return this.bests.get(level >>> 0) ?? null;
 	}
 
-	listBests(): Array<{level: number; moves: number; totalMoves: number}> {
-		const out: Array<{level: number; moves: number; totalMoves: number}> = [];
+	listBests(): Array<{ level: number; moves: number; totalMoves: number }> {
+		const out: Array<{ level: number; moves: number; totalMoves: number }> = [];
 		for (const [level, best] of this.bests) {
-			out.push({level, moves: best.moves, totalMoves: best.totalMoves});
+			out.push({ level, moves: best.moves, totalMoves: best.totalMoves });
 		}
 		out.sort((a, b) => a.level - b.level);
 		return out;
@@ -167,11 +167,11 @@ export class GameSave {
 		const t = totalMoves >>> 0;
 		const existing = this.bests.get(key);
 		const next: BestStat = existing
-			? {moves: Math.min(existing.moves, m), totalMoves: Math.min(existing.totalMoves, t)}
-			: {moves: m, totalMoves: t};
+			? { moves: Math.min(existing.moves, m), totalMoves: Math.min(existing.totalMoves, t) }
+			: { moves: m, totalMoves: t };
 		if (existing && next.moves === existing.moves && next.totalMoves === existing.totalMoves) return;
 		this.bests.set(key, next);
-		void this.persistKV(GameSave.STORE_BEST, key, {moves: next.moves, totalMoves: next.totalMoves});
+		void this.persistKV(GameSave.STORE_BEST, key, { moves: next.moves, totalMoves: next.totalMoves });
 	}
 
 	// ----- Coins (Idle) -----
@@ -212,9 +212,9 @@ export class GameSave {
 		}
 	}
 
-	listUpgrades(): Array<{id: string; level: number}> {
-		const out: Array<{id: string; level: number}> = [];
-		for (const [id, level] of this.upgrades) out.push({id, level});
+	listUpgrades(): Array<{ id: string; level: number }> {
+		const out: Array<{ id: string; level: number }> = [];
+		for (const [id, level] of this.upgrades) out.push({ id, level });
 		return out;
 	}
 
@@ -241,7 +241,7 @@ export class GameSave {
 		try {
 			const db = await this.openDB(idb);
 			const tx = db.transaction([GameSave.STORE_STATE], 'readwrite');
-			tx.objectStore(GameSave.STORE_STATE).put({level: this.level}, GameSave.KEY_STATE);
+			tx.objectStore(GameSave.STORE_STATE).put({ level: this.level }, GameSave.KEY_STATE);
 			await GameSave.txDone(tx);
 		} catch { /* ignorieren */ }
 	}
@@ -252,7 +252,7 @@ export class GameSave {
 		try {
 			const db = await this.openDB(idb);
 			const tx = db.transaction([GameSave.STORE_META], 'readwrite');
-			tx.objectStore(GameSave.STORE_META).put({coins: this.coins}, GameSave.KEY_META);
+			tx.objectStore(GameSave.STORE_META).put({ coins: this.coins }, GameSave.KEY_META);
 			await GameSave.txDone(tx);
 		} catch { /* ignorieren */ }
 	}
@@ -324,7 +324,10 @@ export class GameSave {
 			req.onerror = () => reject(req.error);
 			req.onsuccess = () => {
 				const cur = req.result;
-				if (!cur) { resolve(); return; }
+				if (!cur) {
+					resolve();
+					return;
+				}
 				cb(cur.key, cur.value);
 				cur.continue();
 			};

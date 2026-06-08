@@ -6,7 +6,7 @@
  *
  * Siehe docs/IDLE_PLAN.md für das vollständige Konzept.
  */
-import {Consts} from '@/game/Consts';
+import { Consts } from "@/game/Consts";
 
 export type UpgradeId =
 	| 'automover-random'

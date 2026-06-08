@@ -20,7 +20,7 @@ export interface HUDState {
 }
 
 export class HUDView {
-	private el: HTMLElement | null;
+	private readonly el: HTMLElement | null;
 	private last = '';
 
 	constructor(el: HTMLElement | null) {

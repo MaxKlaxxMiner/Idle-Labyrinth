@@ -1,5 +1,5 @@
-import {GameModeStrategy, ModeHost} from './GameMode';
-import {calculateLevelReward} from '@/idle/Coins';
+import { GameModeStrategy, ModeHost } from "@/game/modes/GameMode";
+import { calculateLevelReward } from "@/idle/Coins";
 
 /**
  * Idle-Modus: inkrementeller Level-Aufstieg, Coin-Belohnung pro Lösung.

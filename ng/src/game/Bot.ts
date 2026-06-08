@@ -1,9 +1,9 @@
-import {Laby} from '@/lib/Laby';
-import {Level} from '@/view/Level';
-import {Input} from '@/input/Input';
-import {StringBuilder} from '@/lib/StringBuilder';
-import {RandomMersenne} from '@/lib/Random';
-import {Consts} from '@/game/Consts';
+import { Laby } from "@/lib/Laby";
+import { StringBuilder } from "@/lib/StringBuilder";
+import { Level } from "@/view/Level";
+import { Input } from "@/input/Input";
+import { RandomMersenne } from "@/lib/Random";
+import { Consts } from "@/game/Consts";
 
 /**
  * Minimal-Schnittstelle, die der Bot vom Spiel braucht. Die Felder werden bei jedem
@@ -11,18 +11,23 @@ import {Consts} from '@/game/Consts';
  * exponiert (sie ändern sich bei Level-Wechsel, der Bot soll immer die aktuelle Ref sehen).
  */
 export interface BotHost {
-	readonly player: {x: number; y: number; r: number};
-	readonly goal: {x: number; y: number};
+	readonly player: { x: number; y: number; r: number };
+	readonly goal: { x: number; y: number };
 	readonly laby: Laby;
 	readonly history: StringBuilder;
 	readonly levelView: Level;
 	readonly input: Input;
+
 	updatePlayer(c: 'L' | 'R' | 'U' | 'D' | 'B' | 'M'): void;
+
 	canStepTo(cx: number, cy: number, nx: number, ny: number): boolean;
+
 	/** Bot läuft nur, wenn der Host ihn aktiviert hat (Idle-Modus, Space-Toggle). */
 	isBotActive(): boolean;
+
 	/** Höchste gekaufte AutoMover-Stufe (1=random, 2=smart, 3=smarter, 4=borderline, 5=speed; 0=keine). */
 	autoMoverTier(): number;
+
 	/** Effektiver Mindestabstand zwischen zwei Bot-Schritten in ms (inkl. Speed-Upgrades). */
 	botStepIntervalMs(): number;
 }
@@ -109,7 +114,7 @@ export class Bot {
 	}
 
 	private performRandomStep(count = 1): void {
-		const {player, goal} = this.host;
+		const { player, goal } = this.host;
 		for (let i = 0; i < count; i++) {
 			const step = this.getRandomStepDirection();
 			if (!step) return;
@@ -119,15 +124,15 @@ export class Bot {
 	}
 
 	private getRandomStepDirection(): 'L' | 'R' | 'U' | 'D' | 'B' | null {
-		const {player, goal, levelView, history} = this.host;
+		const { player, goal, levelView, history } = this.host;
 		const tier = this.host.autoMoverTier();
 		const cx = player.x;
 		const cy = player.y;
-		const options: Array<{dir: 'L' | 'R' | 'U' | 'D'; dx: number; dy: number}> = [
-			{dir: 'L', dx: -2, dy: 0},
-			{dir: 'R', dx: 2, dy: 0},
-			{dir: 'U', dx: 0, dy: -2},
-			{dir: 'D', dx: 0, dy: 2},
+		const options: Array<{ dir: 'L' | 'R' | 'U' | 'D'; dx: number; dy: number }> = [
+			{ dir: 'L', dx: -2, dy: 0 },
+			{ dir: 'R', dx: 2, dy: 0 },
+			{ dir: 'U', dx: 0, dy: -2 },
+			{ dir: 'D', dx: 0, dy: 2 },
 		];
 		const valid: Array<'L' | 'R' | 'U' | 'D'> = [];
 		for (const option of options) {
@@ -171,7 +176,7 @@ export class Bot {
 	// ----- Border-Filler: markiert Sackgassen entlang des bisherigen Pfades -----
 
 	private fillBL(): void {
-		const {player, history, levelView} = this.host;
+		const { player, history, levelView } = this.host;
 		if (Math.abs(this.lastFillX - player.x) + Math.abs(this.lastFillY - player.y) < history.length() / 256) return;
 		this.lastFillX = player.x;
 		this.lastFillY = player.y;
@@ -238,7 +243,7 @@ export class Bot {
 	}
 
 	private fillTR(): void {
-		const {player, history, levelView} = this.host;
+		const { player, history, levelView } = this.host;
 		if (Math.abs(this.lastFillX - player.x) + Math.abs(this.lastFillY - player.y) < history.length() / 256) return;
 		this.lastFillX = player.x;
 		this.lastFillY = player.y;

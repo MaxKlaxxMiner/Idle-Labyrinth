@@ -1,4 +1,4 @@
-import {MenuBackground} from './MenuBackground';
+import { MenuBackground } from "@/menu/MenuBackground";
 
 export type MenuAction = 'idle' | 'endless' | 'stats' | 'hard-reset';
 
@@ -9,8 +9,8 @@ export interface MainMenuOptions {
 // Hauptmenü mit animiertem Labyrinth-Hintergrund.
 // Erwartet im DOM einen leeren Container und ein eigenes Canvas für den Hintergrund.
 export class MainMenu {
-	private root: HTMLElement;
-	private bgCanvas: HTMLCanvasElement;
+	private readonly root: HTMLElement;
+	private readonly bgCanvas: HTMLCanvasElement;
 	private bg: MenuBackground;
 	private options: MainMenuOptions;
 	private statsOverlay: HTMLElement | null = null;
@@ -43,8 +43,8 @@ export class MainMenu {
 
 	showStats(
 		data: {
-			summary: Array<{label: string; value: string}>;
-			endlessLevels: Array<{level: number; moves: number; totalMoves: number}>;
+			summary: Array<{ label: string; value: string }>;
+			endlessLevels: Array<{ level: number; moves: number; totalMoves: number }>;
 		},
 		onReplay?: (level: number) => void,
 	) {

@@ -1,6 +1,6 @@
-import { Laby } from '@/lib/Laby';
-import { Level } from '@/view/Level';
-import { Consts } from '@/game/Consts';
+import { Laby } from "@/lib/Laby";
+import { Level } from "@/view/Level";
+import { Consts } from "@/game/Consts";
 
 // Vollbild-Hintergrund mit langsam rotierendem Labyrinth.
 // Drehmittelpunkt liegt unten-links am Bildschirm, die Laby-Mitte sitzt auf diesem Punkt.

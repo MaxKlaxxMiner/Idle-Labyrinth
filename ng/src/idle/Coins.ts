@@ -27,7 +27,7 @@ export function calculateLevelReward(level: number, repeatCount: number): bigint
 
 /** Anzahl spielbarer Lab-Knoten ohne Rand: ((w-3)/2) * ((h-3)/2). */
 export function estimateNodeCount(level: number): number {
-	const {w, h} = estimateLabyCells(level);
+	const { w, h } = estimateLabyCells(level);
 	return ((w - 3) / 2) * ((h - 3) / 2);
 }
 
@@ -38,12 +38,12 @@ export function estimateNodeCount(level: number): number {
  * Hinweis: Laby halbiert w/h intern (width=(w+1)>>1) und bildet danach pixWidth=width*2-1;
  * da w/h hier stets ungerade sind, entspricht das tatsächliche Pixel-Raster genau w x h.
  */
-export function estimateLabyCells(level: number): {w: number; h: number} {
+export function estimateLabyCells(level: number): { w: number; h: number } {
 	let w = 5;
 	let h = 5;
 	for (let i = 0; i < level; i++) {
 		if (w / h < 1.61803399) w += 2;
 		else h += 2;
 	}
-	return {w, h};
+	return { w, h };
 }

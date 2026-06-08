@@ -1,4 +1,4 @@
-import {GameSave} from '@/lib/GameSave';
+import { GameSave } from "@/lib/GameSave";
 
 /**
  * Schnittstelle, die ein laufendes Spiel den Modus-Strategien anbietet.
@@ -9,6 +9,7 @@ export interface ModeHost {
 	readonly moves: number;
 	readonly totalMoves: number;
 	readonly save: GameSave | null;
+
 	/** Roh-Eingabespur als String (LRUD/B/M). */
 	getHistoryRaw(): string;
 }
@@ -23,7 +24,10 @@ export interface ModeHost {
  */
 export interface GameModeStrategy {
 	readonly id: 'idle' | 'endless';
+
 	computeNextLevel(currentLevel: number): number;
+
 	onLevelSolved(host: ModeHost): void;
+
 	usesHistory(): boolean;
 }

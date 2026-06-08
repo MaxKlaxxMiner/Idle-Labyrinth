@@ -1,9 +1,9 @@
 import './styles.css';
 
-import {Game} from './game/Game';
-import {LabyCache} from '@/lib/LabyCache';
-import {GameSave} from '@/lib/GameSave';
-import {MainMenu, MenuAction} from '@/menu/MainMenu';
+import { LabyCache } from "@/lib/LabyCache";
+import { GameSave } from "@/lib/GameSave";
+import { Game } from "@/game/Game";
+import { MainMenu, MenuAction } from "@/menu/MainMenu";
 
 // Save-Slot je Spielmodus. Labyrinth-Cache nur für Endless (Resume/große Level);
 // Idle generiert jedes Level deterministisch neu (Cache spart dort nichts).
@@ -58,7 +58,7 @@ async function bootstrap() {
 			if (act === 'idle') {
 				menu.hide();
 				appRoot.style.display = '';
-				game = new Game(gameCanvas, {save: idleSave, mode: 'idle', onExit: returnToMenu});
+				game = new Game(gameCanvas, { save: idleSave, mode: 'idle', onExit: returnToMenu });
 				game.start();
 				(window as any).__game = game;
 			} else if (act === 'endless') {
@@ -84,8 +84,8 @@ function collectStats() {
 	// Save hält intern 0-basiertes Level, für die Anzeige +1
 	return {
 		summary: [
-			{label: 'Idle Level', value: String(idleSave.getLevel() + 1)},
-			{label: 'Endless Level', value: String(endlessSave.getLevel() + 1)},
+			{ label: 'Idle Level', value: String(idleSave.getLevel() + 1) },
+			{ label: 'Endless Level', value: String(endlessSave.getLevel() + 1) },
 		],
 		endlessLevels: endlessSave.listBests().map((b) => ({
 			level: b.level + 1,

@@ -1,4 +1,4 @@
-import {UPGRADES, UpgradeDef, UpgradeId, upgradeCost} from './Upgrades';
+import { upgradeCost, UpgradeDef, UpgradeId, UPGRADES } from "@/idle/Upgrades";
 
 /**
  * Floating-Button oben links plus Overlay-Panel mit der Upgrade-Liste.
@@ -7,8 +7,10 @@ import {UPGRADES, UpgradeDef, UpgradeId, upgradeCost} from './Upgrades';
 export interface ShopHost {
 	/** Aktueller Coin-Bestand (zum Anzeigen und Verfügbarkeits-Check). */
 	getCoins(): bigint;
+
 	/** Aktuelle Upgrade-Stufe (0 = nicht gekauft). */
 	getUpgradeLevel(id: UpgradeId): number;
+
 	/**
 	 * Kauf durchführen: zieht Coins ab und erhöht die Upgrade-Stufe.
 	 * Implementierung im Host (Game), damit Save-Persistenz dort gebündelt bleibt.
@@ -17,9 +19,9 @@ export interface ShopHost {
 }
 
 export class ShopView {
-	private parent: HTMLElement;
-	private host: ShopHost;
-	private button: HTMLButtonElement;
+	private readonly parent: HTMLElement;
+	private readonly host: ShopHost;
+	private readonly button: HTMLButtonElement;
 	private overlay: HTMLDivElement | null = null;
 	private listEl: HTMLDivElement | null = null;
 	private coinsValueEl: HTMLSpanElement | null = null;
@@ -28,7 +30,7 @@ export class ShopView {
 	// Serialisierte Reihenfolge der aktuell gerenderten Upgrade-Ids; null erzwingt einen Rebuild.
 	private displayedKey: string | null = null;
 	// Referenzen auf die Zeilen-Elemente für In-Place-Updates (kein DOM-Rebuild pro Frame).
-	private readonly rowEls = new Map<UpgradeId, {row: HTMLDivElement; label: HTMLDivElement; desc: HTMLDivElement; btn: HTMLButtonElement}>();
+	private readonly rowEls = new Map<UpgradeId, { row: HTMLDivElement; label: HTMLDivElement; desc: HTMLDivElement; btn: HTMLButtonElement }>();
 
 	constructor(parent: HTMLElement, host: ShopHost) {
 		this.parent = parent;
@@ -213,8 +215,7 @@ export class ShopView {
 		row.appendChild(btn);
 
 		// Label, Beschreibung, Kosten und Verfügbarkeit werden von updateRow gesetzt.
-		this.rowEls.set(def.id, {row, label, desc, btn});
+		this.rowEls.set(def.id, { row, label, desc, btn });
 		return row;
 	}
 }
-

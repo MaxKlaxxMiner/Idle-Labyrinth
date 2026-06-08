@@ -1,5 +1,5 @@
-import {RandomMersenne} from "./Random";
-import {LabyCache} from "@/lib/LabyCache";
+import { LabyCache } from "@/lib/LabyCache";
+import { RandomMersenne } from "@/lib/Random";
 
 export class Laby {
 	readonly width: number;

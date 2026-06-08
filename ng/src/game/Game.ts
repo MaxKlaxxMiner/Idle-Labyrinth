@@ -1,19 +1,19 @@
-import { Laby } from '@/lib/Laby';
-import { Input } from '@/input/Input';
-import { Consts } from './Consts';
-import { Level } from '@/view/Level';
-import { Camera } from '@/view/Camera';
-import { HUDView } from '@/ui/HUDView';
-import { StringBuilder } from "@/lib/StringBuilder";
 import { LabyCache } from "@/lib/LabyCache";
 import { GameSave } from "@/lib/GameSave";
-import { Bot, BotHost } from './Bot';
-import { GameModeStrategy, ModeHost } from './modes/GameMode';
-import { IdleMode } from './modes/IdleMode';
-import { EndlessMode } from './modes/EndlessMode';
-import { calculateLevelReward } from '@/idle/Coins';
-import { ShopHost, ShopView } from '@/idle/ShopView';
-import { UpgradeId } from '@/idle/Upgrades';
+import { GameModeStrategy, ModeHost } from "@/game/modes/GameMode";
+import { EndlessMode } from "@/game/modes/EndlessMode";
+import { IdleMode } from "@/game/modes/IdleMode";
+import { Bot, BotHost } from "@/game/Bot";
+import { ShopHost, ShopView } from "@/idle/ShopView";
+import { HUDView } from "@/ui/HUDView";
+import { Laby } from "@/lib/Laby";
+import { Level } from "@/view/Level";
+import { Camera } from "@/view/Camera";
+import { Input } from "@/input/Input";
+import { StringBuilder } from "@/lib/StringBuilder";
+import { UpgradeId } from "@/idle/Upgrades";
+import { Consts } from "@/game/Consts";
+import { calculateLevelReward } from "@/idle/Coins";
 
 export type GameMode = 'idle' | 'endless';
 
@@ -36,8 +36,8 @@ function buildModeStrategy(mode: GameMode): GameModeStrategy {
 }
 
 export class Game implements BotHost, ModeHost, ShopHost {
-	private bgCanvas: HTMLCanvasElement;
-	private canvas: HTMLCanvasElement;
+	private readonly bgCanvas: HTMLCanvasElement;
+	private readonly canvas: HTMLCanvasElement;
 	private ctx: CanvasRenderingContext2D;
 	private hud!: HUDView;
 	private rafId: number | null = null;

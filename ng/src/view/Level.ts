@@ -1,10 +1,10 @@
-import {Consts} from '@/game/Consts';
-import {Laby} from '@/lib/Laby';
-import {PixBuffer256} from '@/view/PixBuffer256';
+import { Laby } from "@/lib/Laby";
+import { PixBuffer256 } from "@/view/PixBuffer256";
+import { Consts } from "@/game/Consts";
 
 export class Level {
-	private canvas: HTMLCanvasElement;
-	private ctx: CanvasRenderingContext2D;
+	private readonly canvas: HTMLCanvasElement;
+	private readonly ctx: CanvasRenderingContext2D;
 
 	private laby!: Laby;
 	// Chunked Pixel-Puffer (1px = 1 Zelle), feste Größe 256x256
