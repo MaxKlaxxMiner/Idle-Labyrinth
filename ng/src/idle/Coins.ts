@@ -20,15 +20,15 @@
  * @param repeatCount Wievielmal das Level bereits gelöst wurde, inklusive der gerade abgeschlossenen Lösung (>= 1)
  */
 export function calculateLevelReward(level: number, repeatCount: number): bigint {
-    if (repeatCount < 1) return 0n;
-    const nodes = estimateNodeCount(level);
-    return BigInt(Math.max(0, Math.floor(nodes / repeatCount + 0.98)));
+	if (repeatCount < 1) return 0n;
+	const nodes = estimateNodeCount(level);
+	return BigInt(Math.max(0, Math.floor(nodes / repeatCount + 0.98)));
 }
 
 /** Anzahl spielbarer Lab-Knoten ohne Rand: ((w-3)/2) * ((h-3)/2). */
 export function estimateNodeCount(level: number): number {
-    const {w, h} = estimateLabyCells(level);
-    return ((w - 3) / 2) * ((h - 3) / 2);
+	const {w, h} = estimateLabyCells(level);
+	return ((w - 3) / 2) * ((h - 3) / 2);
 }
 
 /**
@@ -39,11 +39,11 @@ export function estimateNodeCount(level: number): number {
  * da w/h hier stets ungerade sind, entspricht das tatsächliche Pixel-Raster genau w x h.
  */
 export function estimateLabyCells(level: number): {w: number; h: number} {
-    let w = 5;
-    let h = 5;
-    for (let i = 0; i < level; i++) {
-        if (w / h < 1.61803399) w += 2;
-        else h += 2;
-    }
-    return {w, h};
+	let w = 5;
+	let h = 5;
+	for (let i = 0; i < level; i++) {
+		if (w / h < 1.61803399) w += 2;
+		else h += 2;
+	}
+	return {w, h};
 }

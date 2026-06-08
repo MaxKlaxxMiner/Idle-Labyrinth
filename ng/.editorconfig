@@ -1,0 +1,21 @@
+# EditorConfig - projektweiter Einrückungs- und Formatierungsstil.
+# Wird von JetBrains (EditorConfig-Support standardmäßig aktiv, überschreibt das IDE-Schema)
+# und VS Code nativ gelesen. Doku: https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Quellcode: Tabs zum Einrücken, Tabbreite 4. Lange Zeilen sind erlaubt (lieber wenige
+# lange als viele kurze Zeilen); Wrap-Grenze erst bei 250 Zeichen.
+[*.{ts,tsx,js,mjs,cjs,css}]
+indent_style = tab
+indent_size = 4
+max_line_length = 250
+
+# Markdown: ein Absatz/Bullet je Zeile; abschließende Leerzeichen nicht entfernen (harte Umbrüche).
+[*.md]
+trim_trailing_whitespace = false
