@@ -5,6 +5,8 @@ export const Consts = {
     botStepIntervalMs: 1000,
     /** Faktor je 'player-speed'-Stufe auf das Schrittintervall (0.9 = je Stufe 10% kürzeres Intervall). */
     botStepSpeedupPerLevel: 0.9,
+    /** Intervall des Hintergrund-Tickers (ms), der die Idle-Simulation antreibt, solange der Tab versteckt ist (requestAnimationFrame pausiert dann). */
+    idleBackgroundTickMs: 1000,
     colors: {
         background: '#0b0b0b',
         wall: '#1f2937',

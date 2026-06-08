@@ -312,9 +312,12 @@ gibt es keinen echten Cheat-Schutz - alles ist "security by friendliness".
   den nächsten Bot-Schritt um ein Intervall, sodass der Bot nicht direkt nachzuckt. Bei offenem
   Shop läuft der Bot im Hintergrund weiter; gepufferte Eingabe-Flanken werden dabei verworfen,
   damit sie beim Schließen nicht nachfeuern.
-- **Offline-/Idle-Fortschritt:** Der Bot holt verpasste Schritte des aktuellen Levels nach
-  (Catch-up). Ein beschleunigter Mehr-Level-Fortschritt während langer Abwesenheit ist nicht
-  implementiert - der Level-Aufstieg passiert maximal einmal pro Frame.
+- **Offline-/Idle-Fortschritt:** Ein Hintergrund-Ticker (`setInterval`, `Consts.idleBackgroundTickMs`)
+  treibt die Simulation auch bei verstecktem/minimiertem Tab weiter, da `requestAnimationFrame` dann
+  pausiert; der Bot löst so im Hintergrund weiter (Browser drosseln den Timer auf >= 1s, sehr lange
+  inaktive Tabs können ganz eingefroren werden). Pro Tick wird das aktuelle Level fertig gelöst und
+  das nächste begonnen (Catch-up sammelt verpasste Schritte) - ein beschleunigter Mehr-Level-Sprung
+  während langer Abwesenheit ist bewusst NICHT implementiert.
 - **Ratten bei Borderline-Markierung:** Verlassen Ratten einen ungültig markierten Bereich
   automatisch? (Erst relevant, sobald Ratten existieren.)
 - **Drohnen-Mechanik:** Reichweite, Anzahl, Update-Tick, "durch Wände sehen" oder nicht.

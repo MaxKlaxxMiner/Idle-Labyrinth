@@ -41,6 +41,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
     private ctx: CanvasRenderingContext2D;
     private hud!: HUDView;
     private rafId: number | null = null;
+    private bgTickId: ReturnType<typeof setInterval> | null = null;
     private disposed = false;
     // BotHost erwartet die Felder als readonly, intern werden sie bei initLevel neu zugewiesen.
     laby!: Laby;
@@ -203,11 +204,22 @@ export class Game implements BotHost, ModeHost, ShopHost {
             this.rafId = requestAnimationFrame(loop);
         };
         this.rafId = requestAnimationFrame(loop);
+        // Hintergrund-Ticker: treibt die Simulation (ohne Render) weiter, solange der Tab
+        // versteckt ist - dann pausiert requestAnimationFrame komplett. Browser drosseln solche
+        // Timer auf >= 1s, was hier genügt (der Bot-Catch-up sammelt verpasste Schritte pro Tick).
+        if (this.bgTickId == null) {
+            this.bgTickId = setInterval(() => {
+                if (this.disposed || !document.hidden) return;
+                this.tickHidden();
+            }, Consts.idleBackgroundTickMs);
+        }
     }
 
     stop() {
         if (this.rafId != null) cancelAnimationFrame(this.rafId);
         this.rafId = null;
+        if (this.bgTickId != null) clearInterval(this.bgTickId);
+        this.bgTickId = null;
     }
 
     // Alle Ressourcen und DOM-Bindings sauber abräumen. Idempotent.
@@ -328,6 +340,22 @@ export class Game implements BotHost, ModeHost, ShopHost {
             if (this.camera.updateFollowPlayerTile(this.player.x, this.player.y)) this.needsRender = true;
         }
 
+        this.handleSolveAndPersist();
+    }
+
+    /**
+     * Bot-Tick + Solve/Persist ohne Eingabe/Render. Wird vom Hintergrund-Ticker aufgerufen,
+     * solange der Tab versteckt ist (requestAnimationFrame pausiert dann). Verhalten wie im
+     * sichtbaren Frame: pro Tick wird das aktuelle Level fertig gelöst und das nächste begonnen
+     * (kein Mehr-Level-Sprung), der Bot sammelt dabei verpasste Schritte (Catch-up) auf.
+     */
+    private tickHidden() {
+        this.bot.tick();
+        this.handleSolveAndPersist();
+    }
+
+    /** Bei erreichtem Ziel Level-Aufstieg/Reward, sonst gedrosselte historyRaw-Persistenz. */
+    private handleSolveAndPersist() {
         // Ziel erreicht?
         if (this.player.x === this.goal.x && this.player.y === this.goal.y) {
             this.modeStrategy.onLevelSolved(this);
