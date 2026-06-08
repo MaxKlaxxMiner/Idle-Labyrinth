@@ -51,9 +51,15 @@ export class Bot {
 	// Deterministischer RNG; wird pro Level (Start/Reset) levelabhängig in-place neu geseedet.
 	private readonly rng = new RandomMersenne(0);
 
-	// Fill-Highlight-Skip-Schwelle: letzte Position, an der gefüllt wurde
-	private lastFillX = 0;
-	private lastFillY = 0;
+	// Borderline-Filler-Cursor je Seite (BL/TR): das Präfix [0, len) ist auf dieser Seite bereits als
+	// Sackgasse markiert; (x, y) ist der Pfadknoten bei Index len. So läuft fill* nur den neuen
+	// Pfad-Abschnitt ab statt jedes Mal von vorn. Ein Backtrack kürzt den Cursor (siehe onBacktrack).
+	private blLen = 0;
+	private blX = 1;
+	private blY = 1;
+	private trLen = 0;
+	private trX = 1;
+	private trY = 1;
 
 	constructor(host: BotHost) {
 		this.host = host;
@@ -62,8 +68,12 @@ export class Bot {
 	/** Setzt den Bot-Zustand auf Level-Start zurück; seedt den RNG levelabhängig (reproduzierbar). */
 	resetForLevel(seed: number): void {
 		this.rng.init(seed);
-		this.lastFillX = 0;
-		this.lastFillY = 0;
+		this.blLen = 0;
+		this.blX = 1;
+		this.blY = 1;
+		this.trLen = 0;
+		this.trX = 1;
+		this.trY = 1;
 		this.armTimer();
 	}
 
@@ -104,13 +114,35 @@ export class Bot {
 	}
 
 	/**
-	 * Nach jedem erfolgreichen Forward-Schritt in Game.updatePlayer(). Aktuell deaktiviert.
-	 * Argumente: neue Spielerposition (nx, ny) sowie Lab-Dimensionen via this.host.laby.
+	 * Nach jedem erfolgreichen Forward-Schritt aus Game.updatePlayer(). Stößt ab AutoMover-Stufe 4
+	 * (Borderline) den Rand-Filler an: beim Erreichen eines Rands wird der entlang des Pfades
+	 * eingeschlossene Bereich als Sackgasse markiert. Argumente: neue Spielerposition (nx, ny).
 	 */
-	onForwardStep(_nx: number, _ny: number): void {
-		// const {laby} = this.host;
-		// if (_ny === 1 || _nx === laby.pixWidth - 2) this.fillTR();
-		// if (_nx === 1 || _ny === laby.pixHeight - 2) this.fillBL();
+	onForwardStep(nx: number, ny: number): void {
+		if (this.host.autoMoverTier() < 4) return;
+		const { laby } = this.host;
+		if (ny === 1 || nx === laby.pixWidth - 2) this.fillTR();
+		if (nx === 1 || ny === laby.pixHeight - 2) this.fillBL();
+	}
+
+	/**
+	 * Nach einem Backtrack (Undo / 'B') aufrufen. Ist der Pfad jetzt kürzer als ein bereits
+	 * markierter Präfix, wird der Cursor dieser Seite auf die neue Länge zurückgesetzt und auf die
+	 * aktuelle (zurückgelaufene) Spielerposition gesetzt - sonst würden beim erneuten Vorlaufen über
+	 * eine andere Route Segmente übersprungen.
+	 */
+	onBacktrack(nx: number, ny: number): void {
+		const len = this.host.history.length();
+		if (len < this.blLen) {
+			this.blLen = len;
+			this.blX = nx;
+			this.blY = ny;
+		}
+		if (len < this.trLen) {
+			this.trLen = len;
+			this.trX = nx;
+			this.trY = ny;
+		}
 	}
 
 	private performRandomStep(count = 1): void {
@@ -176,16 +208,14 @@ export class Bot {
 	// ----- Border-Filler: markiert Sackgassen entlang des bisherigen Pfades -----
 
 	private fillBL(): void {
-		const { player, history, levelView } = this.host;
-		if (Math.abs(this.lastFillX - player.x) + Math.abs(this.lastFillY - player.y) < history.length() / 256) return;
-		this.lastFillX = player.x;
-		this.lastFillY = player.y;
-		const moves = history.toString();
-		let px = 1;
-		let py = 1;
+		const { history, levelView } = this.host;
+		const end = history.length();
+		const start = this.blLen;
+		let px = this.blX;
+		let py = this.blY;
 		let pix = 0 | 0;
-		for (let i = 0; i < moves.length; i++) {
-			switch (moves[i]) {
+		for (let i = start; i < end; i++) {
+			switch (history.charAt(i)) {
 				case 'L':
 					pix = levelView.getPixel(px, py - 1);
 					if (pix === levelView.bgColor32 || pix === levelView.backtrackColor32) {
@@ -240,19 +270,20 @@ export class Bot {
 					break;
 			}
 		}
+		this.blLen = end;
+		this.blX = px;
+		this.blY = py;
 	}
 
 	private fillTR(): void {
-		const { player, history, levelView } = this.host;
-		if (Math.abs(this.lastFillX - player.x) + Math.abs(this.lastFillY - player.y) < history.length() / 256) return;
-		this.lastFillX = player.x;
-		this.lastFillY = player.y;
-		const moves = history.toString();
-		let px = 1;
-		let py = 1;
+		const { history, levelView } = this.host;
+		const end = history.length();
+		const start = this.trLen;
+		let px = this.trX;
+		let py = this.trY;
 		let pix = 0 | 0;
-		for (let i = 0; i < moves.length; i++) {
-			switch (moves[i]) {
+		for (let i = start; i < end; i++) {
+			switch (history.charAt(i)) {
 				case 'L':
 					pix = levelView.getPixel(px, py + 1);
 					if (pix === levelView.bgColor32 || pix === levelView.backtrackColor32) {
@@ -307,5 +338,8 @@ export class Bot {
 					break;
 			}
 		}
+		this.trLen = end;
+		this.trX = px;
+		this.trY = py;
 	}
 }

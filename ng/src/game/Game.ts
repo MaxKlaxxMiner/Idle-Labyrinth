@@ -691,6 +691,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			this.autoClearMarkerAt(this.player.x, this.player.y);
 			this.needsRender = true;
 			this.history.removeLastChar();
+			this.bot.onBacktrack(this.player.x, this.player.y);
 			return;
 		}
 
@@ -724,6 +725,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			const highlightMode = this.getBacktrackHighlightMode(prevX, prevY);
 			this.applyBacktrackHighlight(prevX, prevY, cx, cy, highlightMode);
 			this.history.removeLastChar();
+			this.bot.onBacktrack(this.player.x, this.player.y);
 			this.moves = Math.max(0, this.moves - 1);
 			this.totalMoves++;
 		} else {
@@ -732,7 +734,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			this.history.append(inputKey);
 			this.moves += 1;
 			this.totalMoves++;
-			// Bot-Hook für Borderline-Filler (aktuell no-op)
+			// Bot-Hook für Borderline-Filler (markiert beim Erreichen des Rands ungültige Bereiche)
 			this.bot.onForwardStep(nx, ny);
 		}
 		this.recordRawInput(inputKey);

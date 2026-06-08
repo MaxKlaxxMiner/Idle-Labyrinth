@@ -75,16 +75,16 @@ export const UPGRADES: ReadonlyArray<UpgradeDef> = [
 		cost: 2000,
 		requires: ['automover-smart'],
 	},
-	// Noch nicht implementiert (funktionslos) - bis zur Umsetzung auskommentiert, damit diese
-	// Upgrades nicht kaufbar im Shop erscheinen. Siehe docs/IDLE_PLAN.md.
-	/*
 	{
 		id: 'automover-smarter-borderline',
 		label: 'AutoMover (Borderline)',
-		description: 'Markiert ganze Aussenbereiche als ungültig, wenn der Rand erreicht wird.',
+		description: 'Markiert ganze Außenbereiche als ungültig, wenn der Rand erreicht wird.',
 		cost: 8000,
 		requires: ['automover-smarter'],
 	},
+	// Noch nicht implementiert (funktionslos) - bis zur Umsetzung auskommentiert, damit dieses Upgrade
+	// nicht kaufbar im Shop erscheint (doppelte Rückweg-Geschwindigkeit). Siehe docs/IDLE_PLAN.md.
+	/*
 	{
 		id: 'automover-smarter-borderline-speed',
 		label: 'AutoMover (Speed)',
