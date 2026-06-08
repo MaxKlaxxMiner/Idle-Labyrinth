@@ -5,6 +5,8 @@ export const Consts = {
     botStepIntervalMs: 1000,
     /** Faktor je 'player-speed'-Stufe auf das Schrittintervall (0.9 = je Stufe 10% kürzeres Intervall). */
     botStepSpeedupPerLevel: 0.9,
+    /** Mindest-Cooldown nach manuellem Eingriff bei aktivem Bot in ms; verhindert, dass der Bot bei hohen Speed-Stufen sofort wieder übernimmt. */
+    botManualCooldownMs: 500,
     /** Intervall des Hintergrund-Tickers (ms), der die Idle-Simulation antreibt, solange der Tab versteckt ist (requestAnimationFrame pausiert dann). */
     idleBackgroundTickMs: 1000,
     colors: {
@@ -30,7 +32,7 @@ export const Consts = {
     },
     zoom: {
         steps: [1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 21, 26, 34, 42, 55, 68, 89, 110, 144],
-        minStartTileSize: 6,
+        minStartTileSize: 10,
     },
     largeLevels: new Set<number>([
         1, 2, 4, 6, 8, 11, 15, 20, 26, 33, 42, 54, 69, 88,

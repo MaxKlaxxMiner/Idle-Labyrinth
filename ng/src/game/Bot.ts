@@ -3,6 +3,7 @@ import {Level} from '@/view/Level';
 import {Input} from '@/input/Input';
 import {StringBuilder} from '@/lib/StringBuilder';
 import {RandomMersenne} from '@/lib/Random';
+import {Consts} from '@/game/Consts';
 
 /**
  * Minimal-Schnittstelle, die der Bot vom Spiel braucht. Die Felder werden bei jedem
@@ -66,9 +67,15 @@ export class Bot {
         this.armTimer();
     }
 
-    /** Nach manuellem Eingriff aufrufen: der nächste Bot-Schritt folgt erst ein Intervall später. */
+    /**
+     * Nach manuellem Eingriff aufrufen: der nächste Bot-Schritt folgt erst nach einem Cooldown.
+     * Der Cooldown ist mindestens `Consts.botManualCooldownMs`, damit der Bot bei hohen
+     * Speed-Stufen (sehr kleines Intervall) nicht sofort wieder übernimmt und manuelles
+     * Steuern spielbar bleibt.
+     */
     deferNextStep(): void {
-        this.armTimer();
+        const cooldown = Math.max(this.host.botStepIntervalMs(), Consts.botManualCooldownMs);
+        this.nextStepTime = performance.now() + cooldown;
     }
 
     /** Setzt die nächste Schritt-Deadline ein Intervall in die Zukunft (kein Schritt-Stau). */
