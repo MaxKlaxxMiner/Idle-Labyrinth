@@ -614,9 +614,10 @@ export class Game implements BotHost, ModeHost, ShopHost {
         // Bot-RNG levelabhängig seeden: gleiches Level/Reset -> gleiche Zufallsfolge (fair, reproduzierbar).
         this.bot.resetForLevel(Consts.labySeedBase + this.level);
 
-        // Camera: Weltmaße setzen, Best-Fit und zentrieren
+        // Camera: Weltmaße setzen, Best-Fit und zentrieren. Beim Levelwechsel eine bereits weiter
+        // herausgezoomte Stufe des Vorlevels beibehalten (statt wieder auf minStartTileSize hineinzuspringen).
         this.camera.setWorldSize(this.laby.pixWidth, this.laby.pixHeight);
-        this.camera.setBestFitZoom();
+        this.camera.setBestFitZoom(true);
         this.camera.centerOnPlayerTile(this.player.x, this.player.y);
         this.followPaused = false;
         this.needsRender = true;

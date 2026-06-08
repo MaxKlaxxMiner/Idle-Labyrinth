@@ -100,7 +100,7 @@ export const UPGRADES: ReadonlyArray<UpgradeDef> = [
         cost: 100,
         requires: ['automover-random'],
         maxLevel: Infinity,
-        costGrowthPercent: 11,
+        costGrowthPercent: 5,
         describe: (level) => {
             const sps = (lvl: number) =>
                 1000 / (Consts.botStepIntervalMs * Math.pow(Consts.botStepSpeedupPerLevel, lvl));

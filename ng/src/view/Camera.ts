@@ -11,10 +11,20 @@ export class Camera {
     private pixH = 0;
     private tileSizeIndex = 0;
     private tileSize = Consts.zoom.steps[0] ?? 5;
+    // Wurde bereits einmal automatisch gefittet? Der erste Autofit hat keine vorherige
+    // Spieler-Zoomstufe und ignoriert daher die keepFurtherZoomOut-Begrenzung.
+    private hasAutoFitted = false;
 
     constructor(deadFracX = 0.60, deadFracY = 0.70) {
         this.deadFracX = deadFracX;
         this.deadFracY = deadFracY;
+    }
+
+    /** Index der ersten Zoomstufe, deren Tilegröße mindestens `minTileSize` beträgt (sonst die größte Stufe). */
+    private indexForMinTileSize(minTileSize: number): number {
+        const steps = Consts.zoom.steps;
+        for (let i = 0; i < steps.length; i++) if (steps[i] >= minTileSize) return i;
+        return steps.length - 1;
     }
 
     setViewSize(w: number, h: number) {
@@ -62,7 +72,16 @@ export class Camera {
         return {worldW: this.pixW * this.tileSize, worldH: this.pixH * this.tileSize};
     }
 
-    setBestFitZoom() {
+    /**
+     * Wählt die größte Zoomstufe, bei der das Labyrinth in die View passt, klemmt aber nach unten
+     * auf `minStartTileSize` (riesige Labyrinthe passen nie ganz hinein -> sonst zu kleine Tiles).
+     *
+     * Mit `keepFurtherZoomOut` (Levelwechsel) wird zusätzlich nie enger als die aktuelle Stufe
+     * gezoomt: war der Spieler im Vorlevel weiter herausgezoomt als der Best-Fit ergäbe, bleibt
+     * diese herausgezoomte Stufe erhalten, statt wieder hineinzuspringen. Der erste Autofit fittet
+     * normal (es gibt keine vorherige Spieler-Zoomstufe).
+     */
+    setBestFitZoom(keepFurtherZoomOut = false) {
         const steps = Consts.zoom.steps;
         const w = this.viewW, h = this.viewH;
         const maxTileW = Math.floor((w - Consts.sizes.basePad * 2) / Math.max(1, this.pixW));
@@ -71,14 +90,10 @@ export class Camera {
         const minStart = Consts.zoom.minStartTileSize;
         let idx = 0;
         for (let i = 0; i < steps.length; i++) if (steps[i] <= maxFit) idx = i;
-        if (steps[idx] < minStart) {
-            for (let i = 0; i < steps.length; i++) {
-                if (steps[i] >= minStart) {
-                    idx = i;
-                    break;
-                }
-            }
-        }
+        if (steps[idx] < minStart) idx = this.indexForMinTileSize(minStart);
+        // Beim Levelwechsel nicht über die aktuelle (evtl. weiter herausgezoomte) Stufe hinaus hineinzoomen.
+        if (keepFurtherZoomOut && this.hasAutoFitted) idx = Math.min(idx, this.tileSizeIndex);
+        this.hasAutoFitted = true;
         this.setTileSizeIndex(idx);
     }
 
