@@ -9,6 +9,7 @@ Dieses Projekt folgt dem Format von "Keep a Changelog" und SemVer (siehe VERSION
 - Upgrade-Shop: Registry und Kostenformel (`src/idle/Upgrades.ts`), Overlay mit klassenbasierter Sichtbarkeit und Preis-Sortierung (`src/idle/ShopView.ts`); Shop ab Level 5.
 - AutoMover: deterministischer, geseedter Bot (`src/game/Bot.ts`) mit Stufen 1-3 (random/smart/smarter) sowie AutoMover-Speed.
 - Cache: IndexedDB-basierter `LabyCache` für sehr große Labyrinth-Daten (Chunking).
+- Performance: Folge-Level werden in Web Workern parallel vorab generiert (`src/lib/LabyPrefetch.ts`/`LabyWorker.ts`); Levelwechsel übernimmt das fertige Bitset ohne Frame-Hänger, mit synchroner Generierung als Fallback.
 - Rendering: Chunked-1px-Bitmap (`PixBuffer256`, 256x256) mit skaliertem Blit; optionale 1px-Gaps zwischen Zellen.
 - UI: HUD in eigenes DOM-Element `#hud` ausgelagert; Anzeige von Level, Coins (inkl. erwarteter Belohnung im Idle-Modus), Moves/Gesamt-Moves und Steuerhilfen.
 - Steuerung: `Space` setzt im Endless einen Marker bzw. toggelt im Idle den AutoMover, `Enter` zentriert auf Spieler.

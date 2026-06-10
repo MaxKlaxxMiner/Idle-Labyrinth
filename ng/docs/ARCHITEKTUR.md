@@ -8,6 +8,7 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 - `src/game/Game.ts`: Zentrale Spielklasse (Game-Loop, Eingabe, Level-/Renderlogik, Persistenz, Pfad-Historie/Undo).
 - `src/game/Consts.ts`: Zentrale Konstanten (Farben, Zoomstufen, Tile-/Pad-Größen, "large levels", Bot-Timing).
 - `src/game/Bot.ts`: AutoMover (Verhalten gestaffelt nach gekaufter Upgrade-Stufe, deterministischer RNG je Level).
+- `src/game/LabyParams.ts`: Reine Funktion `labyParamsForLevel(level)` -> `{width, height, seed}` (Größenheuristik + Seed-Formel, gemeinsam genutzt von Spiel und Vorab-Generierung).
 - `src/game/modes/`: Modus-Strategie - `GameMode` (Interfaces `GameModeStrategy`/`ModeHost`), `IdleMode`, `EndlessMode`.
 - `src/idle/Coins.ts`: Coin-Belohnung (bigint) inkl. Wiederholungs-Decay.
 - `src/idle/Upgrades.ts`: Upgrade-Registry und Kostenformel (ganzzahlig, bigint).
@@ -18,8 +19,10 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 - `src/view/PixBuffer256.ts`: Wrapper um ein 256x256-`ImageData` + Canvas für direkte Uint32-Pixelmanipulation.
 - `src/ui/HUDView.ts`: Schreibt den HUD-Text in das DOM-Element `#hud`.
 - `src/input/Input.ts`: Tastatureingabe (gedrückt/edge-getriggert). `consumeStepKey()` liefert pro Tastendruck genau eine Richtung `L/R/U/D` (deterministische Priorität); `consumeKey()` für Edge-Tasten, `isPressed()` für Halte-Logik.
-- `src/lib/Laby.ts`: Deterministischer, seed-basierter Labyrinth-Generator. Stellt das "expandierte" Grid (`pixWidth` x `pixHeight`) sowie `isFree(x,y)` bereit.
+- `src/lib/Laby.ts`: Deterministischer, seed-basierter Labyrinth-Generator. Stellt das "expandierte" Grid (`pixWidth` x `pixHeight`) sowie `isFree(x,y)` bereit; das fertige Labyrinth ist vollständig durch das gepackte Bitset `bits` (Uint32Array) repräsentiert und kann auch direkt aus vorab generierten Wanddaten entstehen (`bits`-Parameter).
 - `src/lib/LabyCache.ts`: IndexedDB-Cache mit Chunking (8 MiB pro Chunk), hält das zuletzt generierte Level zusätzlich im RAM, damit `readLaby()` synchron nutzbar ist.
+- `src/lib/LabyPrefetch.ts`: Vorab-Generierung der Folge-Level in einem Web-Worker-Pool (logische Cores - 1, gedeckelt über `Consts.labyPrefetchMaxWorkers`); vorgehalten werden `Consts.labyPrefetchDepth` Folge-Level als Bitsets in einer In-Memory-Map, abgeholt beim Levelwechsel per `take()` (synchroner Fallback, wenn nicht fertig).
+- `src/lib/LabyWorker.ts`: Worker-Entry der Generierung (empfängt `{level, width, height, seed}`, sendet das Bitset per Transferable zurück).
 - `src/lib/GameSave.ts`: Spielstand in IndexedDB, eine DB pro Modus-Slot (`idle-laby-save-<slot>`, 6 Object-Stores).
 - `src/lib/Random.ts`: Mersenne Twister + schneller LCG.
 - `src/lib/StringBuilder.ts`: Effizienter String-Aufbau (für `history`/`historyRaw`).
@@ -37,7 +40,7 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 - Eingabe: `Input.consumeStepKey()` liefert pro Tastendruck eine Richtung als Zeichen `L/R/U/D`; `consumeKey('r')`/`consumeKey(' ')`/`consumeKey('Enter')` etc. für Edge-Trigger; Halten-Logik via `isPressed()`.
 - Undo: `Backspace`/`Delete` macht den letzten Schritt rückgängig (Autorepeat funktioniert über wiederholte `keydown`-Events).
 - Marker: `Space` markiert die aktuelle Zelle (in `markers: Set<number>`).
-- Levelgröße wächst über eine einfache Heuristik (Start 5x5, Zuwachs um 2, Verhältnis nähert goldenen Schnitt an). Seed: `Consts.labySeedBase + w + h + level`.
+- Levelgröße wächst über eine einfache Heuristik (Start 5x5, Zuwachs um 2, Verhältnis nähert goldenen Schnitt an). Seed: `Consts.labySeedBase + w + h + level`. Beides gekapselt in `labyParamsForLevel` (`src/game/LabyParams.ts`).
 - Spawn/Goal: Sucht jeweils die nächste freie Innenzelle nahe (1,1) bzw. (pixWidth-2, pixHeight-2).
 - Persistenz: `GameSave` (IndexedDB, eine DB pro Modus-Slot `idle-laby-save-idle`/`idle-laby-save-endless`) hält das aktuelle `level` (Store `state`), Coins (bigint), gekaufte Upgrade-Stufen und Wiederholungszähler sowie - im Endless - Verlauf und Bestwerte pro Level. Labyrinth-Daten werden nur im Endless gecacht (`LabyCache`, Datenbank `idle-laby-cache-endless`); der Idle-Modus generiert jedes Level deterministisch neu (kein Labyrinth-Cache). Kein `localStorage`.
 - Pfad-Historie: `history` als `StringBuilder` mit `L/R/U/D` (Vorwärtsschritt anhängen, Undo entfernen).
@@ -55,7 +58,8 @@ Diese Datei beschreibt die aktuelle Struktur, Laufzeitlogik und sinnvolle Erweit
 4) Labyrinth (`Laby`)
 - Interne Repräsentation im Zellenraster (komprimiert in `Uint32Array`, 2 Wandbits + 30 Bit Gruppen-ID pro Zelle); Ausgabe über das expandierte Raster (`pixWidth` x `pixHeight`, intern `w*2-1` x `h*2-1`).
 - `isFree(x,y)` liefert für Knoten/Kanten/Zellen, ob begehbar ist; Intersections (gerade/gerade) sind Wände.
-- Generator baut deterministisch anhand `seed` ein zusammenhängendes Labyrinth (Wand-Stürze + Restdurchläufe); Endlagen werden komprimiert und - sofern ein `LabyCache` übergeben wurde (nur Endless) - dort gespeichert.
+- Generator baut deterministisch anhand `seed` ein zusammenhängendes Labyrinth (Wand-Stürze + Restdurchläufe); Endlagen werden komprimiert (Bitset `bits`) und - sofern ein `LabyCache` übergeben wurde (nur Endless) - dort gespeichert.
+- Vorab-Generierung: `Game.initLevel` stößt über `LabyPrefetch` die nächsten `Consts.labyPrefetchDepth` Level (Folge aus `computeNextLevel`) in Web Workern an; der Pool umfasst logische Cores - 1 Worker, gedeckelt auf `Consts.labyPrefetchMaxWorkers`. Der Worker führt dieselbe Generierung aus und liefert das Bitset per Transferable; beim Levelwechsel übernimmt der `Laby`-Konstruktor es über den `bits`-Parameter (und legt es im Endless zusätzlich in den `LabyCache`). Ist das Ergebnis noch nicht da, generiert der Main-Thread synchron - die Worker sind reine Beschleunigung, keine Voraussetzung. Speicher fällt im Wesentlichen nur während der Generierung an (transienter Puffer 4 Bytes pro Zelle im jeweiligen Worker); die gepufferten Bitsets selbst sind klein (2 Bits pro Zelle).
 
 ## Koordinaten und Bewegung
 

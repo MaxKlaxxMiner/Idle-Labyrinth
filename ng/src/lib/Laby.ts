@@ -1,15 +1,23 @@
-import { LabyCache } from "@/lib/LabyCache";
+import type { LabyCache } from "@/lib/LabyCache";
 import { RandomMersenne } from "@/lib/Random";
+
+// Generator-Fortschritt nur im Main-Thread loggen; in Workern bleibt die Konsole still
+// (dort meldet der Empfänger den Puffer-Stand).
+const inWorker = typeof window === 'undefined';
+
+function log(message: string): void {
+	if (!inWorker) console.log(message);
+}
 
 export class Laby {
 	readonly width: number;
 	readonly height: number;
 	readonly pixWidth: number;
 	readonly pixHeight: number;
-	readonly getHWall: (pos: number) => boolean;
-	readonly getVWall: (pos: number) => boolean;
+	/** Gepackte Wanddaten (2 Bits pro Zelle, H/V); vollständige Repräsentation des Labyrinths. */
+	readonly bits: Uint32Array;
 
-	constructor(width: number, height: number, seed: number, cache?: LabyCache | null) {
+	constructor(width: number, height: number, seed: number, cache?: LabyCache | null, bits?: Uint32Array | null) {
 		if (width < 5) width = 5;
 		width = (width + 1) >> 1;
 		if (height < 5) height = 5;
@@ -19,14 +27,21 @@ export class Laby {
 		this.height = height;
 		this.pixWidth = width * 2 - 1;
 		this.pixHeight = height * 2 - 1;
-		console.log(`Laby: start ${this.pixWidth} x ${this.pixHeight} pixels`);
+		log(`Laby: start ${this.pixWidth} x ${this.pixHeight} pixels`);
 		const cacheKey = this.width * this.height ^ seed;
+		if (bits) {
+			// Vorab generierte Wanddaten (z. B. aus einem Worker) direkt übernehmen;
+			// wie bei frischer Generierung im Cache ablegen (Endless-Resume).
+			this.bits = bits;
+			if (cache) cache.saveLaby(cacheKey, bits);
+			log(`Laby: ready. (precomputed)`);
+			return;
+		}
 		const cached = cache ? cache.readLaby(cacheKey) : null;
 		if (cached) {
-			this.getHWall = (pos: number): boolean => (cached[pos >> 4] & (1 << ((pos << 1) & 31))) != 0;
-			this.getVWall = (pos: number): boolean => (cached[pos >> 4] & (1 << (((pos << 1) | 1) & 31))) != 0;
-			console.log(`Laby: ready. (cached)`);
-			return
+			this.bits = cached;
+			log(`Laby: ready. (cached)`);
+			return;
 		}
 
 		const fields = new Uint32Array(width * height);
@@ -153,7 +168,7 @@ export class Laby {
 				}
 			}
 			totalFounds += founds;
-			console.log(`Laby: generate ${totalFounds} / ${totalEstimate} (${((totalFounds / totalEstimate) * 100).toFixed(2)} %)`);
+			log(`Laby: generate ${totalFounds} / ${totalEstimate} (${((totalFounds / totalEstimate) * 100).toFixed(2)} %)`);
 			if (founds < remainLimit) break;
 		}
 
@@ -169,7 +184,7 @@ export class Laby {
 					}
 				}
 			}
-			console.log(`Laby: remain ${remain.length}`);
+			log(`Laby: remain ${remain.length}`);
 			for (let i = 0; i < remain.length; i++) {
 				const j = rnd.nextInt() % (i + 1);
 				const tmp = remain[i];
@@ -194,16 +209,24 @@ export class Laby {
 			}
 		}
 
-		console.log(cache ? `Laby: convert & save...` : `Laby: convert...`);
+		log(cache ? `Laby: convert & save...` : `Laby: convert...`);
 		const tmp = new Uint32Array((width * height * 2 + 31) >> 5);
-		this.getHWall = (pos: number): boolean => (tmp[pos >> 4] & (1 << ((pos << 1) & 31))) != 0;
-		this.getVWall = (pos: number): boolean => (tmp[pos >> 4] & (1 << (((pos << 1) | 1) & 31))) != 0;
 		for (let pos = 0; pos < fields.length; pos++) {
 			if (getHWall(pos)) tmp[pos >> 4] |= 1 << ((pos << 1) & 31);
 			if (getVWall(pos)) tmp[pos >> 4] |= 1 << (((pos << 1) | 1) & 31);
 		}
+		this.bits = tmp;
 		if (cache) cache.saveLaby(cacheKey, tmp);
-		console.log(`Laby: ready.`);
+		log(`Laby: ready.`);
+	}
+
+	// Wand-Abfragen auf dem gepackten Bitset (pos = Zellindex im width*height-Raster)
+	getHWall(pos: number): boolean {
+		return (this.bits[pos >> 4] & (1 << ((pos << 1) & 31))) != 0;
+	}
+
+	getVWall(pos: number): boolean {
+		return (this.bits[pos >> 4] & (1 << (((pos << 1) | 1) & 31))) != 0;
 	}
 
 	// Grid-Helper: true, wenn Tile (x,y) begehbar ist

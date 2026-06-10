@@ -7,6 +7,8 @@ import { Bot, BotHost } from "@/game/Bot";
 import { ShopHost, ShopView } from "@/idle/ShopView";
 import { HUDView } from "@/ui/HUDView";
 import { Laby } from "@/lib/Laby";
+import { LabyPrefetch } from "@/lib/LabyPrefetch";
+import { labyParamsForLevel } from "@/game/LabyParams";
 import { Level } from "@/view/Level";
 import { Camera } from "@/view/Camera";
 import { Input } from "@/input/Input";
@@ -75,6 +77,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	private followPaused = false;
 
 	private readonly cache: LabyCache | null;
+	private readonly prefetch = new LabyPrefetch(Consts.labyPrefetchDepth, Consts.labyPrefetchMaxWorkers);
 	readonly save: GameSave | null;
 	private readonly modeStrategy!: GameModeStrategy;
 	private readonly onExit: (() => void) | null;
@@ -244,6 +247,8 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		// FG-Canvas wurde im Constructor selbst angelegt -> wieder entfernen
 		if (this.canvas.parentElement) this.canvas.parentElement.removeChild(this.canvas);
 		this.shop?.dispose();
+		// Laufende Worker-Generierungen beenden (eine Generierung ist nicht unterbrechbar)
+		this.prefetch.dispose();
 	}
 
 	private update() {
@@ -546,14 +551,22 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	}
 
 	private createLabyForLevel(gameLevel: number): Laby {
-		// Größenentwicklung nach Schnipsel: w,h starten bei 5 und wachsen um 2,
-		// gesteuert über das Verhältnis w/h zum goldenen Schnitt.
-		let w = 5;
-		let h = 5;
-		for (let i = 0; i < gameLevel; i++) {
-			if (w / h < 1.61803399) w += 2; else h += 2;
+		const p = labyParamsForLevel(gameLevel);
+		// Vorab generierte Wanddaten aus dem Worker-Puffer nutzen, sonst synchron generieren.
+		return new Laby(p.width, p.height, p.seed, this.cache, this.prefetch.take(gameLevel));
+	}
+
+	/** Stößt die Vorab-Generierung der nächsten Consts.labyPrefetchDepth Level in Workern an. */
+	private prefetchUpcomingLevels() {
+		// Replay springt nach dem Lösen zum gespeicherten Level zurück - die Folge-Level
+		// aus computeNextLevel wären hier falsch.
+		if (this.replayMode) return;
+		let next = this.level;
+		for (let i = 0; i < Consts.labyPrefetchDepth; i++) {
+			next = this.modeStrategy.computeNextLevel(next);
+			const p = labyParamsForLevel(next);
+			this.prefetch.request(next, p.width, p.height, p.seed);
 		}
-		return new Laby(w, h, Consts.labySeedBase + w + h + gameLevel, this.cache);
 	}
 
 	canStepTo(cx: number, cy: number, nx: number, ny: number): boolean {
@@ -604,6 +617,9 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	}
 
 	private initLevel() {
+		// Folge-Level vor dem aktuellen anstoßen: die Worker generieren bereits parallel,
+		// während unten ggf. noch synchron das aktuelle Level entsteht.
+		this.prefetchUpcomingLevels();
 		this.laby = this.createLabyForLevel(this.level);
 
 		this.moves = 0;

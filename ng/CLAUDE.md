@@ -18,9 +18,8 @@ Kurzleitfaden für die Zusammenarbeit in diesem Projekt. Ersetzt das frühere AG
 - Tooling: Wenn ein LSP-Tool verfügbar ist (TypeScript-LSP `plugin:typescript-lsp:typescript`), bei Code-Navigation/-Analyse bevorzugt nutzen (`hover`, `goToDefinition`, `findReferences`, `documentSymbol`, Call-Hierarchy) statt rein per Grep. Erster Aufruf kann verzögert sein (Server startet), danach reagiert er sofort.
 
 ## Git & Commits
-- Branch: direkte lokale Commits auf `master` sind erlaubt. Keine Pushes.
-- Commit-Prefix: jede Nachricht beginnt mit `laby: `.
-- Zeitpunkt: erst committen, nachdem die stabile Funktionsweise direkt oder indirekt bestätigt wurde.
+- Commits macht der Maintainer in der Regel selbst (Diff-Review als Überblick/Lerneffekt); Claude schlägt an passenden Haltepunkten nur einen knappen Einzeiler vor (Prefix `laby: `).
+- Claude committet nur auf ausdrückliche Aufforderung - und erst, nachdem die stabile Funktionsweise direkt oder indirekt bestätigt wurde. Keine Pushes.
 - Keine Änderungen an der Git-Repo-Konfiguration (Name/E-Mail).
 
 ## Projektüberblick
@@ -32,7 +31,7 @@ Kurzleitfaden für die Zusammenarbeit in diesem Projekt. Ersetzt das frühere AG
   - `src/view/` - `Camera`, `Level` (Chunked-Bitmap-Renderer), `PixBuffer256` (256x256-Chunk).
   - `src/ui/` - `HUDView` (DOM-Element `#hud`).
   - `src/input/` - `Input` (Tastatur, Edge/Pressed-Logik).
-  - `src/lib/` - `Laby` (Generator + `isFree`), `LabyCache` (IndexedDB), `Random`, `StringBuilder`.
+  - `src/lib/` - `Laby` (Generator + `isFree`), `LabyCache` (IndexedDB), `LabyPrefetch`/`LabyWorker` (Vorab-Generierung in Web Workern), `Random`, `StringBuilder`.
 
 ## Scripts
 - `npm run dev` - Vite-Dev-Server (Port 5173, HMR, auto-open).
