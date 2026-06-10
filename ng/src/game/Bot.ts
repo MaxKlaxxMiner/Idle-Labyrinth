@@ -167,6 +167,7 @@ export class Bot {
 			{ dir: 'D', dx: 0, dy: 2 },
 		];
 		const valid: Array<'L' | 'R' | 'U' | 'D'> = [];
+		const revisits: Array<'L' | 'R' | 'U' | 'D'> = [];
 		for (const option of options) {
 			const nx = cx + option.dx;
 			const ny = cy + option.dy;
@@ -177,8 +178,13 @@ export class Bot {
 			const isDeadend = targetColor === levelView.deadendColor32;
 			const isTrail = targetColor === levelView.trailColor32;
 			if (tier >= 2) {
-				// Stufe 'smart': markierte Sackgassen und Trails strikt meiden.
+				// Stufe 'smart': markierte Sackgassen und Trails strikt meiden; grau zurückgelaufene
+				// Wege nur als Fallback nehmen, wenn keine unerkundete Abzweigung offen ist.
 				if (isDeadend || isTrail) continue;
+				if (targetColor === levelView.backtrackColor32) {
+					revisits.push(option.dir);
+					continue;
+				}
 			} else {
 				// Stufe 'random': nur grobe Laufrichtung - Sackgassen zu 75%, Trails zu 50% meiden.
 				if (isDeadend && this.rng.next() < 0.75) continue;
@@ -186,23 +192,25 @@ export class Bot {
 			}
 			valid.push(option.dir);
 		}
+		// Unerkundete Richtungen bevorzugen, sonst auf zurückgelaufene Wege ausweichen.
+		const pool = valid.length > 0 ? valid : revisits;
 		// Sind keine Richtungen übrig, per 'B' aus der Sackgasse zurücklaufen (alle Stufen).
-		if (valid.length === 0) return history.length() > 0 ? 'B' : null;
+		if (pool.length === 0) return history.length() > 0 ? 'B' : null;
 
 		if (tier >= 3) {
 			// Stufe 'smarter': Richtung priorisieren, die per Luftlinie näher zum Ziel führt.
 			// Start liegt oben-links, Ziel unten-rechts, daher Vergleich der Differenzen ohne Betrag.
 			if (goal.x - player.x >= goal.y - player.y) {
-				for (let i = 0; i < valid.length; i++) if (valid[i] === 'R') return 'R';
-				for (let i = 0; i < valid.length; i++) if (valid[i] === 'D') return 'D';
+				for (let i = 0; i < pool.length; i++) if (pool[i] === 'R') return 'R';
+				for (let i = 0; i < pool.length; i++) if (pool[i] === 'D') return 'D';
 			} else {
-				for (let i = 0; i < valid.length; i++) if (valid[i] === 'D') return 'D';
-				for (let i = 0; i < valid.length; i++) if (valid[i] === 'R') return 'R';
+				for (let i = 0; i < pool.length; i++) if (pool[i] === 'D') return 'D';
+				for (let i = 0; i < pool.length; i++) if (pool[i] === 'R') return 'R';
 			}
 		}
 
-		const index = Math.floor(this.rng.next() * valid.length);
-		return valid[index];
+		const index = Math.floor(this.rng.next() * pool.length);
+		return pool[index];
 	}
 
 	// ----- Border-Filler: markiert Sackgassen entlang des bisherigen Pfades -----

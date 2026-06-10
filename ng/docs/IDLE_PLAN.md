@@ -127,7 +127,7 @@ Ratten und Drohnen sind noch Registry-Einträge ohne Effekt.
 | Stufe | Id | Kosten | requires | Verhalten | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `automover-random` | 10 | - | Rein zufällig unter begehbaren Nachbarn; meidet Sackgassen zu 75%, Trails zu 50% (grobe Laufrichtung) | Umgesetzt |
-| 2 | `automover-smart` | 500 | random | Meidet markierte Sackgassen/Trails strikt, nimmt das Ziel direkt wenn benachbart, läuft per `B` aus Sackgassen zurück | Umgesetzt |
+| 2 | `automover-smart` | 500 | random | Meidet markierte Sackgassen/Trails strikt, bevorzugt unerkundete Wege vor grau zurückgelaufenen, nimmt das Ziel direkt wenn benachbart, läuft per `B` aus Sackgassen zurück | Umgesetzt |
 | 3 | `automover-smarter` | 2000 | smart | Zusätzlich Luftlinien-Priorisierung Richtung Ziel | Umgesetzt |
 | 4 | `automover-smarter-borderline` | 8000 | smarter | Markiert beim Erreichen des Rands ungültige Innenbereiche | Offen |
 | 5 | `automover-smarter-borderline-speed` | 20000 | borderline | Rückwege mit doppelter Geschwindigkeit | Offen |
@@ -136,7 +136,9 @@ Ratten und Drohnen sind noch Registry-Einträge ohne Effekt.
 AutoMover-Stufe über `BotHost.autoMoverTier()` (1=random ... 5=speed). Stufe 1 ist bewusst
 dumm: rein zufällige Wahl unter den begehbaren Nachbarn, mit nur grober Tendenz (Sackgassen
 zu 75%, Trails zu 50% gemieden); läuft notfalls per `B` zurück. Ab Stufe 2 (`smart`) werden
-markierte Sackgassen/Trails strikt gemieden und ein benachbartes Ziel direkt genommen, ab
+markierte Sackgassen/Trails strikt gemieden, ein benachbartes Ziel direkt genommen und grau
+zurückgelaufene Wege nur als Fallback betreten, wenn keine unerkundete Abzweigung offen ist
+(wichtig nach manuellen Korrekturen, damit der Bot nicht denselben Irrweg wiederholt). Ab
 Stufe 3 (`smarter`) kommt die Luftlinien-Priorisierung dazu. Die 75/50-Werte sind als
 Konstanten in `Bot.getRandomStepDirection` justierbar.
 
