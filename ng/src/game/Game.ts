@@ -82,6 +82,11 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	private readonly modeStrategy!: GameModeStrategy;
 	private readonly onExit: (() => void) | null;
 	private replayMode = false;
+	// Async-Levelwechsel: solange ein Worker das Laby liefert, pausiert die Simulation.
+	private hasLevel = false;
+	private levelLoading = false;
+	private initLevelToken = 0;
+	private labyLevel = -1;
 	private readonly bot!: Bot;
 	private readonly shop!: ShopView | null;
 	private botActive = false;
@@ -274,7 +279,8 @@ export class Game implements BotHost, ModeHost, ShopHost {
 
 		// Bei offenem Shop pausiert nur die Spieler-Eingabe; die Simulation (Bot, Level-Solve,
 		// Coins) und das Rendering laufen im Hintergrund weiter.
-		if (!shopOpen) {
+		// Während eines asynchronen Levelwechsels (levelLoading) pausiert die Spielsteuerung ebenfalls.
+		if (!shopOpen && !this.levelLoading) {
 			// Zoom-Steuerung (über Camera)
 			let zoomChanged = false;
 			if (this.input.consumeKey('0')) {
@@ -344,14 +350,15 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		}
 
 		// AutoMover läuft unabhängig von der Eingabe weiter - auch bei offenem Shop.
-		this.bot.tick();
+		// Während eines asynchronen Levelwechsels ruht die Simulation; der Bot-Takt beginnt im neuen Level frisch.
+		if (!this.levelLoading) this.bot.tick();
 
 		// Kamera-Follow mit Dead-Zone (bei Drag pausieren)
 		if (!this.dragging && !this.followPaused) {
 			if (this.camera.updateFollowPlayerTile(this.player.x, this.player.y)) this.needsRender = true;
 		}
 
-		this.handleSolveAndPersist();
+		if (!this.levelLoading) this.handleSolveAndPersist();
 	}
 
 	/**
@@ -361,6 +368,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	 * (kein Mehr-Level-Sprung), der Bot sammelt dabei verpasste Schritte (Catch-up) auf.
 	 */
 	private tickHidden() {
+		if (this.levelLoading) return;
 		this.bot.tick();
 		this.handleSolveAndPersist();
 	}
@@ -392,6 +400,8 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	}
 
 	private persistHistoryNow() {
+		// Während eines asynchronen Levelwechsels gehört historyRaw noch zum alten Level - nicht unter dem neuen Key speichern (die getrimmte Spur hat onLevelSolved bereits persistiert).
+		if (this.levelLoading) return;
 		if (!this.modeStrategy.usesHistory() || !this.save) return;
 		this.save.setHistory(this.level, this.historyRaw.toString());
 	}
@@ -442,13 +452,15 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	}
 
 	private updateHud() {
+		// Während eines asynchronen Levelwechsels zeigt das HUD weiter das sichtbare (alte) Level, this.level ist dann bereits das kommende.
+		const displayLevel = this.levelLoading ? this.labyLevel : this.level;
 		let coins: bigint | undefined;
 		let coinsPending: bigint | undefined;
 		let spaceAction: 'mark' | 'available' | 'active' | undefined;
 		if (this.modeStrategy.id === 'idle') {
 			coins = this.save?.getCoins() ?? 0n;
-			const clears = this.save?.getLevelClears(this.level) ?? 0;
-			coinsPending = calculateLevelReward(this.level, clears + 1);
+			const clears = this.save?.getLevelClears(displayLevel) ?? 0;
+			coinsPending = calculateLevelReward(displayLevel, clears + 1);
 			if (this.isAutoMoverAvailable()) {
 				spaceAction = this.botActive ? 'active' : 'available';
 			}
@@ -456,7 +468,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			spaceAction = 'mark';
 		}
 		this.hud.set({
-			level: this.level + 1,
+			level: displayLevel + 1,
 			pixW: this.laby.pixWidth,
 			pixH: this.laby.pixHeight,
 			moves: this.moves,
@@ -550,12 +562,6 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		}
 	}
 
-	private createLabyForLevel(gameLevel: number): Laby {
-		const p = labyParamsForLevel(gameLevel);
-		// Vorab generierte Wanddaten aus dem Worker-Puffer nutzen, sonst synchron generieren.
-		return new Laby(p.width, p.height, p.seed, this.cache, this.prefetch.take(gameLevel));
-	}
-
 	/** Stößt die Vorab-Generierung der nächsten Consts.labyPrefetchDepth Level in Workern an. */
 	private prefetchUpcomingLevels() {
 		// Replay springt nach dem Lösen zum gespeicherten Level zurück - die Folge-Level
@@ -617,10 +623,57 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	}
 
 	private initLevel() {
-		// Folge-Level vor dem aktuellen anstoßen: die Worker generieren bereits parallel,
-		// während unten ggf. noch synchron das aktuelle Level entsteht.
+		this.initLevelToken++;
+		// Überholte Worker-Arbeit verwerfen (im Replay liegen eingereihte Level bewusst höher)
+		if (!this.replayMode) this.prefetch.discardBelow(this.level);
+
+		// Erneuter Start desselben Levels (R-Reset, Replay-Rücksprung): Laby ist deterministisch, die vorhandene Instanz kann direkt wiederverwendet werden.
+		if (this.hasLevel && this.labyLevel === this.level) {
+			this.finishInitLevel(this.laby);
+			return;
+		}
+
+		const p = labyParamsForLevel(this.level);
+		const buffered = this.prefetch.take(this.level);
+		if (buffered) {
+			this.prefetchUpcomingLevels();
+			this.finishInitLevel(new Laby(p.width, p.height, p.seed, this.cache, buffered));
+			return;
+		}
+
+		// Kaltstart (noch kein Laby vorhanden): synchron generieren, damit Loop und HUD sofort ein Level haben; die Worker füllen den Puffer parallel.
+		if (!this.hasLevel) {
+			this.prefetchUpcomingLevels();
+			this.finishInitLevel(new Laby(p.width, p.height, p.seed, this.cache));
+			return;
+		}
+
+		// Auf die (meist schon laufende) Worker-Generierung warten statt doppelt zu rechnen.
+		// Die Simulation pausiert derweil (levelLoading); der Bot-Takt beginnt im neuen Level frisch. Ohne Worker liefert acquire() null -> synchroner Pfad.
+		const wait = this.prefetch.acquire(this.level, p.width, p.height, p.seed);
+		if (!wait) {
+			this.prefetchUpcomingLevels();
+			this.finishInitLevel(new Laby(p.width, p.height, p.seed, this.cache));
+			return;
+		}
 		this.prefetchUpcomingLevels();
-		this.laby = this.createLabyForLevel(this.level);
+		this.levelLoading = true;
+		console.log(`Laby: wait (worker)`);
+		const token = this.initLevelToken;
+		void wait.then((bits) => {
+			if (this.disposed || token !== this.initLevelToken) return;
+			// bits = null bedeutet Worker-Fehler; der Laby-Konstruktor generiert dann selbst.
+			this.finishInitLevel(new Laby(p.width, p.height, p.seed, this.cache, bits));
+		});
+	}
+
+	private finishInitLevel(laby: Laby) {
+		this.levelLoading = false;
+		// Während der Wartezeit gepufferte Tastendruck-Flanken verwerfen, damit sie nicht ins frische Level feuern.
+		this.input.clearEdges();
+		this.laby = laby;
+		this.labyLevel = this.level;
+		this.hasLevel = true;
 
 		this.moves = 0;
 		this.totalMoves = 0;
