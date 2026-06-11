@@ -77,7 +77,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	private followPaused = false;
 
 	private readonly cache: LabyCache | null;
-	private readonly prefetch = new LabyPrefetch(Consts.labyPrefetchDepth, Consts.labyPrefetchMaxWorkers);
+	private readonly prefetch: LabyPrefetch | null;
 	readonly save: GameSave | null;
 	private readonly modeStrategy!: GameModeStrategy;
 	private readonly onExit: (() => void) | null;
@@ -146,6 +146,11 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		this.cache = opts?.cache ?? null;
 		this.save = opts?.save ?? null;
 		this.modeStrategy = buildModeStrategy(opts?.mode ?? 'idle');
+		// Prefetch nur im Idle-Modus: Endless springt entlang Consts.largeLevels, dort
+		// würde die Vorab-Generierung riesiger Labyrinthe Worker und Speicher blockieren.
+		this.prefetch = this.modeStrategy.id === 'idle'
+			? new LabyPrefetch(Consts.labyPrefetchDepth, Consts.labyPrefetchMaxWorkers)
+			: null;
 		this.onExit = opts?.onExit ?? null;
 		this.replayMode = typeof opts?.replayLevel === 'number';
 		this.bot = new Bot(this);
@@ -253,7 +258,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		if (this.canvas.parentElement) this.canvas.parentElement.removeChild(this.canvas);
 		this.shop?.dispose();
 		// Laufende Worker-Generierungen beenden (eine Generierung ist nicht unterbrechbar)
-		this.prefetch.dispose();
+		this.prefetch?.dispose();
 	}
 
 	private update() {
@@ -564,6 +569,9 @@ export class Game implements BotHost, ModeHost, ShopHost {
 
 	/** Stößt die Vorab-Generierung der nächsten Consts.labyPrefetchDepth Level in Workern an. */
 	private prefetchUpcomingLevels() {
+		// Kein Prefetch-Pool (Endless-Modus) -> nichts vorzubereiten.
+		const prefetch = this.prefetch;
+		if (!prefetch) return;
 		// Replay springt nach dem Lösen zum gespeicherten Level zurück - die Folge-Level
 		// aus computeNextLevel wären hier falsch.
 		if (this.replayMode) return;
@@ -571,7 +579,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		for (let i = 0; i < Consts.labyPrefetchDepth; i++) {
 			next = this.modeStrategy.computeNextLevel(next);
 			const p = labyParamsForLevel(next);
-			this.prefetch.request(next, p.width, p.height, p.seed);
+			prefetch.request(next, p.width, p.height, p.seed);
 		}
 	}
 
@@ -625,7 +633,8 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	private initLevel() {
 		this.initLevelToken++;
 		// Überholte Worker-Arbeit verwerfen (im Replay liegen eingereihte Level bewusst höher)
-		if (!this.replayMode) this.prefetch.discardBelow(this.level);
+		// Ohne Prefetch-Pool (Endless) ist nichts zu verwerfen.
+		if (!this.replayMode) this.prefetch?.discardBelow(this.level);
 
 		// Erneuter Start desselben Levels (R-Reset, Replay-Rücksprung): Laby ist deterministisch, die vorhandene Instanz kann direkt wiederverwendet werden.
 		if (this.hasLevel && this.labyLevel === this.level) {
@@ -634,7 +643,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		}
 
 		const p = labyParamsForLevel(this.level);
-		const buffered = this.prefetch.take(this.level);
+		const buffered = this.prefetch?.take(this.level) ?? null;
 		if (buffered) {
 			this.prefetchUpcomingLevels();
 			this.finishInitLevel(new Laby(p.width, p.height, p.seed, this.cache, buffered));
@@ -649,8 +658,9 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		}
 
 		// Auf die (meist schon laufende) Worker-Generierung warten statt doppelt zu rechnen.
-		// Die Simulation pausiert derweil (levelLoading); der Bot-Takt beginnt im neuen Level frisch. Ohne Worker liefert acquire() null -> synchroner Pfad.
-		const wait = this.prefetch.acquire(this.level, p.width, p.height, p.seed);
+		// Die Simulation pausiert derweil (levelLoading); der Bot-Takt beginnt im neuen Level frisch.
+		// Ohne Worker bzw. ohne Prefetch-Pool (Endless) liefert acquire() null -> synchroner Pfad.
+		const wait = this.prefetch?.acquire(this.level, p.width, p.height, p.seed) ?? null;
 		if (!wait) {
 			this.prefetchUpcomingLevels();
 			this.finishInitLevel(new Laby(p.width, p.height, p.seed, this.cache));
