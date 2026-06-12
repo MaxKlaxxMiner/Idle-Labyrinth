@@ -33,7 +33,7 @@ export function estimateNodeCount(level: number): number {
 
 /**
  * Schätzt die Lab-Zellmaße (w/h) ohne den Generator laufen zu lassen.
- * Spiegelt die Heuristik aus Game.createLabyForLevel: w/h starten bei 5
+ * Spiegelt die Heuristik aus labyParamsForLevel: w/h starten bei 5
  * und wachsen abwechselnd um 2, sodass das Verhältnis dem goldenen Schnitt zustrebt.
  * Hinweis: Laby halbiert w/h intern (width=(w+1)>>1) und bildet danach pixWidth=width*2-1;
  * da w/h hier stets ungerade sind, entspricht das tatsächliche Pixel-Raster genau w x h.
