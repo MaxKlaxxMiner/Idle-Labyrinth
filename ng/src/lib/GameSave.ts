@@ -8,6 +8,8 @@
  * - meta:       { coins: bigint }                        - Coin-Wallet (Idle)
  * - upgrades:   { [upgradeId: string]: number }          - gekaufte Upgrade-Stufen (Idle)
  * - clears:     { [level: number]: number }              - Wiederholungs-Zähler pro Level (Idle)
+ * - greenMarkers: { [level: number]: number[] }          - pro Level frei per Rechtsklick gesetzte Marker (Endless),
+ *                                                          je Marker als (x << 16) | y gepackt
  *
  * Alle Daten werden bei init() in den RAM geladen; Lese-Ops sind synchron,
  * Schreib-Ops aktualisieren RAM sofort und persistieren asynchron im Hintergrund.
@@ -19,13 +21,14 @@ export interface BestStat {
 }
 
 export class GameSave {
-	private static readonly DB_VERSION = 3;
+	private static readonly DB_VERSION = 4;
 	private static readonly STORE_STATE = 'state';
 	private static readonly STORE_HISTORIES = 'histories';
 	private static readonly STORE_BEST = 'best';
 	private static readonly STORE_META = 'meta';
 	private static readonly STORE_UPGRADES = 'upgrades';
 	private static readonly STORE_CLEARS = 'clears';
+	private static readonly STORE_GREEN_MARKERS = 'greenMarkers';
 	private static readonly KEY_STATE = 'save';
 	private static readonly KEY_META = 'meta';
 
@@ -38,6 +41,7 @@ export class GameSave {
 	private coins = 0n;
 	private upgrades = new Map<string, number>();
 	private clears = new Map<number, number>();
+	private greenMarkers = new Map<number, number[]>();
 
 	constructor(slot: string) {
 		this.dbName = `idle-laby-save-${slot}`;
@@ -52,6 +56,7 @@ export class GameSave {
 			const stores = [
 				GameSave.STORE_STATE, GameSave.STORE_HISTORIES, GameSave.STORE_BEST,
 				GameSave.STORE_META, GameSave.STORE_UPGRADES, GameSave.STORE_CLEARS,
+				GameSave.STORE_GREEN_MARKERS,
 			];
 			const tx = db.transaction(stores, 'readonly');
 
@@ -106,6 +111,15 @@ export class GameSave {
 				}
 			});
 
+			// greenMarkers: Map<level, number[]> (gepackte (x<<16)|y-Keys)
+			await GameSave.cursorEach(tx.objectStore(GameSave.STORE_GREEN_MARKERS), (key, value) => {
+				const k = Number(key);
+				if (Number.isFinite(k) && Array.isArray(value)) {
+					const keys = value.filter((v) => typeof v === 'number' && Number.isFinite(v));
+					if (keys.length > 0) this.greenMarkers.set(k, keys);
+				}
+			});
+
 			await GameSave.txDone(tx);
 		} catch {
 			// Cache bleibt leer / unvollständig
@@ -142,6 +156,30 @@ export class GameSave {
 			if (this.histories.get(key) === raw) return;
 			this.histories.set(key, raw);
 			void this.persistKV(GameSave.STORE_HISTORIES, key, raw);
+		}
+	}
+
+	// ----- Grüne Marker (Endless, frei per Rechtsklick gesetzt) -----
+	// Anders als die roten Marker (Zeichen 'M' im historyRaw, immer an der Spielerposition,
+	// daher beim Replay rekonstruierbar) sitzen grüne Marker an beliebigen Mauskoordinaten.
+	// Sie lassen sich nicht aus dem Eingabeverlauf ableiten und werden deshalb als
+	// explizite, pro Level gepackte Koordinatenliste gespeichert.
+
+	getGreenMarkers(level: number): number[] {
+		return this.greenMarkers.get(level >>> 0) ?? [];
+	}
+
+	setGreenMarkers(level: number, keys: number[]): void {
+		const key = level >>> 0;
+		if (keys.length === 0) {
+			if (!this.greenMarkers.has(key)) return;
+			this.greenMarkers.delete(key);
+			void this.persistKV(GameSave.STORE_GREEN_MARKERS, key, null);
+		} else {
+			// Kopie ablegen, damit spätere Mutationen am Aufrufer-Array den RAM-Cache nicht verändern.
+			const copy = keys.slice();
+			this.greenMarkers.set(key, copy);
+			void this.persistKV(GameSave.STORE_GREEN_MARKERS, key, copy);
 		}
 	}
 
@@ -284,6 +322,7 @@ export class GameSave {
 				if (!db.objectStoreNames.contains(GameSave.STORE_META)) db.createObjectStore(GameSave.STORE_META);
 				if (!db.objectStoreNames.contains(GameSave.STORE_UPGRADES)) db.createObjectStore(GameSave.STORE_UPGRADES);
 				if (!db.objectStoreNames.contains(GameSave.STORE_CLEARS)) db.createObjectStore(GameSave.STORE_CLEARS);
+				if (!db.objectStoreNames.contains(GameSave.STORE_GREEN_MARKERS)) db.createObjectStore(GameSave.STORE_GREEN_MARKERS);
 			};
 			req.onsuccess = () => resolve(req.result);
 			req.onerror = () => reject(req.error);

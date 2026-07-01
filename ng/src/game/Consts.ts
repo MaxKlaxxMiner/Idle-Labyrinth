@@ -23,6 +23,7 @@ export const Consts = {
 		backtrack: 'rgba(148, 163, 184, 0.15)',
 		deadend: 'rgba(244, 63, 94, 0.2)',
 		marker: '#ef4444',
+		markerGreen: '#22c55e',
 	},
 	sizes: {
 		basePad: 8,

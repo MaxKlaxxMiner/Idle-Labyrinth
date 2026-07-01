@@ -47,7 +47,8 @@ Im Hauptmenü wählbar:
 - Bewegung: `WASD` oder Pfeiltasten - diskrete Schritte von Knoten zu Knoten (je 2 Kacheln).
 - Ziel: das blaue Feld erreichen, um ins nächste Level zu wechseln.
 - Rückgängig: `Backspace` / `Entf` - genau ein Schritt (Autorepeat beim Halten).
-- Leertaste: im **Idle** AutoMover an/aus (sobald gekauft), im **Endless** Marker auf der aktuellen Zelle.
+- Leertaste: im **Idle** AutoMover an/aus (sobald gekauft), im **Endless** roter Marker auf der aktuellen Zelle.
+- Rechtsklick (nur **Endless**): grüner Marker auf einer beliebigen Zelle (Weg oder Wand), erneuter Rechtsklick entfernt ihn wieder.
 - Zoom: `+` / `-` stufenweise, `0` = Best-Fit.
 - Auf Spieler zentrieren: `Enter`.
 - Level zurücksetzen: `R` (fragt nach, wenn man nicht am Start steht).

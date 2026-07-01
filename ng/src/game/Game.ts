@@ -66,6 +66,10 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	private replaying = false;                  // aktiv während des Replays beim Level-Start (keine Persistierung)
 	private lastHistorySaveAt = 0;              // Throttle-Zeitstempel für historyRaw-Persistenz
 	private markers = new Set<number>();
+	// Frei per Rechtsklick gesetzte Marker (Endless): an beliebigen Zellen, auch auf Wänden.
+	// Im Unterschied zu markers (an der Spielerposition, persistiert via 'M' im historyRaw)
+	// werden diese als explizite Koordinaten gespeichert (GameSave.setGreenMarkers).
+	private greenMarkers = new Set<number>();
 
 	// Mouse-drag Panning (temporär, Kamera folgt erst nach Bewegung wieder)
 	private dragging = false;
@@ -194,12 +198,15 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		this.onMouseMove = this.onMouseMove.bind(this);
 		this.onMouseUp = this.onMouseUp.bind(this);
 		this.onWheel = this.onWheel.bind(this);
+		this.onContextMenu = this.onContextMenu.bind(this);
 		window.addEventListener('resize', this.onResize);
 		// Maus-Eingaben auf dem BG-Canvas abgreifen (FG hat pointer-events: none)
 		this.bgCanvas.addEventListener('mousedown', this.onMouseDown);
 		window.addEventListener('mousemove', this.onMouseMove);
 		window.addEventListener('mouseup', this.onMouseUp);
 		this.bgCanvas.addEventListener('wheel', this.onWheel, { passive: false });
+		// Rechtsklick: grünen Marker setzen/entfernen (Endless); unterdrückt das Browser-Kontextmenü.
+		this.bgCanvas.addEventListener('contextmenu', this.onContextMenu);
 	}
 
 	start() {
@@ -253,6 +260,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		window.removeEventListener('mousemove', this.onMouseMove);
 		window.removeEventListener('mouseup', this.onMouseUp);
 		this.bgCanvas.removeEventListener('wheel', this.onWheel);
+		this.bgCanvas.removeEventListener('contextmenu', this.onContextMenu);
 		this.input.dispose();
 		// FG-Canvas wurde im Constructor selbst angelegt -> wieder entfernen
 		if (this.canvas.parentElement) this.canvas.parentElement.removeChild(this.canvas);
@@ -341,8 +349,11 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			if (this.input.consumeKey('r', 'R')) {
 				const atStart = this.player.x === 1 && this.player.y === 1;
 				if (!atStart && confirm('Level zurücksetzen und zum Start zurückkehren?')) {
-					// Endless: gespeicherten Verlauf für dieses Level verwerfen
-					if (this.modeStrategy.usesHistory()) this.save?.setHistory(this.level, '');
+					// Endless: gespeicherten Verlauf und grüne Marker für dieses Level verwerfen
+					if (this.modeStrategy.usesHistory()) {
+						this.save?.setHistory(this.level, '');
+						this.save?.setGreenMarkers(this.level, []);
+					}
 					this.initLevel();
 				}
 			}
@@ -442,6 +453,20 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		// Marker zeichnen (rote Kreise) - über dem Spieler
 		this.ctx.fillStyle = Consts.colors.marker;
 		for (const key of this.markers) {
+			const mx = (key >>> 16) & 0xffff;
+			const my = key & 0xffff;
+			if (size < Consts.sizes.smallTileThreshold) {
+				this.ctx.fillRect(ox + mx * size, oy + my * size, size, size);
+			} else {
+				this.ctx.beginPath();
+				this.ctx.arc(ox + (mx + 0.5) * size + 0.5, oy + (my + 0.5) * size + 0.5, Math.max(1, 0.28 * size), 0, Math.PI * 2);
+				this.ctx.fill();
+			}
+		}
+
+		// Grüne Marker zeichnen (frei per Rechtsklick gesetzt, auch auf Wänden)
+		this.ctx.fillStyle = Consts.colors.markerGreen;
+		for (const key of this.greenMarkers) {
 			const mx = (key >>> 16) & 0xffff;
 			const my = key & 0xffff;
 			if (size < Consts.sizes.smallTileThreshold) {
@@ -565,6 +590,28 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			this.followPaused = true;
 			this.needsRender = true;
 		}
+	}
+
+	// Rechtsklick: grünen Marker an der geklickten Zelle setzen/entfernen.
+	// preventDefault unterdrückt das Browser-Kontextmenü über dem Spielfeld in jedem Modus;
+	// gesetzt werden grüne Marker aber nur im Endless (Persistierung pro Level).
+	private onContextMenu(e: MouseEvent) {
+		e.preventDefault();
+		if (this.modeStrategy.id !== 'endless') return;
+		// Während eines asynchronen Levelwechsels gehört this.level schon zum neuen Level,
+		// die sichtbare Geometrie aber noch zum alten -> keine Marker setzen.
+		if (this.levelLoading || !this.hasLevel) return;
+		const rect = this.bgCanvas.getBoundingClientRect();
+		const dpr = Math.min(Consts.display.dprMax, window.devicePixelRatio || 1);
+		const canvasX = (e.clientX - rect.left) * dpr;
+		const canvasY = (e.clientY - rect.top) * dpr;
+		const { ox, oy, tileSize } = this.camera.getOffsets();
+		if (tileSize <= 0) return;
+		const tileX = Math.floor((canvasX - ox) / tileSize);
+		const tileY = Math.floor((canvasY - oy) / tileSize);
+		// Nur innerhalb des Labyrinths; Wege wie Wände sind erlaubt.
+		if (tileX < 0 || tileY < 0 || tileX >= this.laby.pixWidth || tileY >= this.laby.pixHeight) return;
+		this.toggleGreenMarkerAt(tileX, tileY);
 	}
 
 	/** Stößt die Vorab-Generierung der nächsten Consts.labyPrefetchDepth Level in Workern an. */
@@ -695,6 +742,11 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		this.goal.x = Math.max(1, this.laby.pixWidth - 2);
 		this.goal.y = Math.max(1, this.laby.pixHeight - 2);
 		this.markers.clear();
+		// Grüne Marker des Levels aus dem Save übernehmen (rote ergeben sich aus dem History-Replay).
+		this.greenMarkers.clear();
+		if (this.modeStrategy.usesHistory() && this.save) {
+			for (const k of this.save.getGreenMarkers(this.level)) this.greenMarkers.add(k);
+		}
 		this.levelView.setLaby(this.laby);
 		// Bot-RNG levelabhängig seeden: gleiches Level/Reset -> gleiche Zufallsfolge (fair, reproduzierbar).
 		this.bot.resetForLevel(Consts.labySeedBase + this.level);
@@ -837,6 +889,20 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	private autoClearMarkerAt(x: number, y: number) {
 		const k = ((x & 0xffff) << 16) | (y & 0xffff);
 		if (this.markers.delete(k)) this.needsRender = true;
+	}
+
+	private toggleGreenMarkerAt(x: number, y: number) {
+		const k = ((x & 0xffff) << 16) | (y & 0xffff);
+		if (this.greenMarkers.has(k)) this.greenMarkers.delete(k); else this.greenMarkers.add(k);
+		this.persistGreenMarkers();
+		this.needsRender = true;
+	}
+
+	// Grüne Marker direkt persistieren (Rechtsklicks sind selten -> kein Throttling nötig).
+	private persistGreenMarkers() {
+		if (this.levelLoading) return;
+		if (!this.modeStrategy.usesHistory() || !this.save) return;
+		this.save.setGreenMarkers(this.level, Array.from(this.greenMarkers));
 	}
 
 }
