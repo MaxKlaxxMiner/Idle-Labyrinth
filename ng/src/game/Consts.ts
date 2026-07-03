@@ -37,7 +37,7 @@ export const Consts = {
 	},
 	zoom: {
 		steps: [1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 21, 26, 34, 42, 55, 68, 89, 110, 144],
-		minStartTileSize: 10,
+		minStartTileSize: 13,
 	},
 	largeLevels: new Set<number>([
 		1, 2, 4, 6, 8, 11, 15, 20, 26, 33, 42, 54, 69, 88,
