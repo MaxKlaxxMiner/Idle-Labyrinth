@@ -88,10 +88,11 @@ export class Level {
 		return chunk.getPixel(x, y);
 	}
 
-	markCell(x: number, y: number, mode: 'trail' | 'backtrack' | 'deadend') {
+	markCell(x: number, y: number, mode: 'trail' | 'backtrack' | 'deadend' | 'clear') {
 		let color = this.backtrackColor32;
 		if (mode === 'trail') color = this.trailColor32;
 		else if (mode === 'deadend') color = this.deadendColor32;
+		else if (mode === 'clear') color = this.bgColor32;
 		this.setPixel(x, y, color);
 	}
 

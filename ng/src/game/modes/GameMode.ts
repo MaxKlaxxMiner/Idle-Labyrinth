@@ -8,9 +8,11 @@ export interface ModeHost {
 	readonly level: number;
 	readonly moves: number;
 	readonly totalMoves: number;
+	/** Verfügbare Undo-Punkte für das echte Rückgängig (Entf, Endless). */
+	readonly undoPoints: number;
 	readonly save: GameSave | null;
 
-	/** Roh-Eingabespur als String (LRUD/B/M). */
+	/** Bewegungsspur als String (L/R/U/D vorwärts, l/r/u/d Rückschritt). */
 	getHistoryRaw(): string;
 }
 

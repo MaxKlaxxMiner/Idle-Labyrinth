@@ -46,7 +46,8 @@ Im Hauptmenü wählbar:
 
 - Bewegung: `WASD` oder Pfeiltasten - diskrete Schritte von Knoten zu Knoten (je 2 Kacheln).
 - Ziel: das blaue Feld erreichen, um ins nächste Level zu wechseln.
-- Rückgängig: `Backspace` / `Entf` - genau ein Schritt (Autorepeat beim Halten).
+- Rückgängig: `Backspace` - genau ein Schritt zurück, zählt als Zug (Autorepeat beim Halten).
+- Echtes Rückgängig (nur **Endless**): `Entf` - macht die letzte Bewegung komplett ungeschehen: ein Vorwärtsschritt wird ausgetragen (samt gelbem Weg), ein Rückschritt (`Backspace`/Gegenrichtung) wird wieder vorwärts aufgelöst; nur Marker sind ausgenommen. Total sinkt dabei immer um 1. Kostet einen Undo-Punkt; alle 10 gelegten Vorwärtsschritte gibt es einen Punkt (Anzeige in Klammern hinter den Moves, Reset bei Levelstart). Ohne Punkte reagiert `Entf` nicht. Im **Idle** wirkt `Entf` wie `Backspace`.
 - Leertaste: im **Idle** AutoMover an/aus (sobald gekauft), im **Endless** roter Marker auf der aktuellen Zelle.
 - Rechtsklick (nur **Endless**): grüner Marker auf einer beliebigen Zelle (Weg oder Wand), erneuter Rechtsklick entfernt ihn wieder.
 - Zoom: `+` / `-` stufenweise, `0` = Best-Fit.

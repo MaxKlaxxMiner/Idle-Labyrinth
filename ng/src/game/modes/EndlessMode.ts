@@ -22,7 +22,7 @@ export class EndlessMode implements GameModeStrategy {
 		if (!host.save) return;
 		host.save.recordBest(host.level, host.moves, host.totalMoves);
 		const trimmed = trimToBeforeLastLrud(host.getHistoryRaw());
-		host.save.setHistory(host.level, trimmed);
+		host.save.setHistory(host.level, trimmed, host.undoPoints);
 	}
 
 	usesHistory(): boolean {
@@ -31,9 +31,10 @@ export class EndlessMode implements GameModeStrategy {
 }
 
 /**
- * Schneidet den historyRaw-String beim letzten LRUD-Zeichen ab (inkl. dieser Position
- * und allem danach). Resultat: nach dem Replay steht der Spieler genau einen Schritt
- * vor seinem zuletzt gemachten Zug. Marker/Undo nach dem letzten Schritt fallen weg.
+ * Schneidet den historyRaw-String beim letzten Vorwärtsschritt (Großbuchstabe L/R/U/D) ab
+ * (inkl. dieser Position und allem danach). Resultat: nach dem Replay steht der Spieler
+ * genau einen Schritt vor seinem zuletzt gemachten Zug. Beim Lösen ist das letzte Zeichen
+ * immer der Vorwärtsschritt aufs Ziel; Rückschritt-Zeichen (Kleinbuchstaben) matchen nicht.
  */
 export function trimToBeforeLastLrud(raw: string): string {
 	for (let i = raw.length - 1; i >= 0; i--) {

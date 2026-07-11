@@ -1,13 +1,17 @@
 /**
  * Persistenter Spielstand pro Slot (z. B. 'idle', 'endless'), backed by IndexedDB.
  *
- * Stores (DB v3):
+ * Stores (DB v5):
  * - state:      { save: { level: number } }              - aktueller Level-Stand
- * - histories:  { [level: number]: string }              - pro Level die Eingabespur (Endless)
+ * - histories:  { [level: number]: { raw, undoPoints } } - pro Level Bewegungsspur (Endless) und
+ *                                                          verfügbare Undo-Punkte (nicht aus der
+ *                                                          kürzbaren Spur rekonstruierbar)
  * - best:       { [level: number]: { moves, totalMoves } } - Bestwerte pro gelöstem Level
  * - meta:       { coins: bigint }                        - Coin-Wallet (Idle)
  * - upgrades:   { [upgradeId: string]: number }          - gekaufte Upgrade-Stufen (Idle)
  * - clears:     { [level: number]: number }              - Wiederholungs-Zähler pro Level (Idle)
+ * - redMarkers: { [level: number]: number[] }            - pro Level an der Spielerposition gesetzte Marker (Endless),
+ *                                                          je Marker als (x << 16) | y gepackt
  * - greenMarkers: { [level: number]: number[] }          - pro Level frei per Rechtsklick gesetzte Marker (Endless),
  *                                                          je Marker als (x << 16) | y gepackt
  *
@@ -15,19 +19,30 @@
  * Schreib-Ops aktualisieren RAM sofort und persistieren asynchron im Hintergrund.
  */
 
+import { migrateLegacyHistory } from "@/lib/HistoryMigration";
+
 export interface BestStat {
 	moves: number;
 	totalMoves: number;
 }
 
+interface HistoryEntry {
+	raw: string;
+	undoPoints: number;
+}
+
 export class GameSave {
-	private static readonly DB_VERSION = 4;
+	// Version 6 statt 5: Repariert Datenbanken, die durch einen Reload mitten in einer
+	// Code-Aktualisierung bereits auf 5 standen, ohne dass alle Stores angelegt waren
+	// (onupgradeneeded ergänzt nur Fehlendes und ist damit gefahrlos wiederholbar).
+	private static readonly DB_VERSION = 6;
 	private static readonly STORE_STATE = 'state';
 	private static readonly STORE_HISTORIES = 'histories';
 	private static readonly STORE_BEST = 'best';
 	private static readonly STORE_META = 'meta';
 	private static readonly STORE_UPGRADES = 'upgrades';
 	private static readonly STORE_CLEARS = 'clears';
+	private static readonly STORE_RED_MARKERS = 'redMarkers';
 	private static readonly STORE_GREEN_MARKERS = 'greenMarkers';
 	private static readonly KEY_STATE = 'save';
 	private static readonly KEY_META = 'meta';
@@ -36,11 +51,12 @@ export class GameSave {
 	private dbPromise: Promise<IDBDatabase> | null = null;
 
 	private level = 0;
-	private histories = new Map<number, string>();
+	private histories = new Map<number, HistoryEntry>();
 	private bests = new Map<number, BestStat>();
 	private coins = 0n;
 	private upgrades = new Map<string, number>();
 	private clears = new Map<number, number>();
+	private redMarkers = new Map<number, number[]>();
 	private greenMarkers = new Map<number, number[]>();
 
 	constructor(slot: string) {
@@ -53,76 +69,129 @@ export class GameSave {
 		if (!idb) return;
 		try {
 			const db = await this.openDB(idb);
-			const stores = [
+			// Nur tatsächlich vorhandene Stores in die Transaktion aufnehmen: fehlt einer
+			// (z. B. nach einem Reload mitten in einer Code-Aktualisierung), darf das nicht
+			// den kompletten Save-Load abreißen - die übrigen Daten laden trotzdem.
+			const wanted = [
 				GameSave.STORE_STATE, GameSave.STORE_HISTORIES, GameSave.STORE_BEST,
 				GameSave.STORE_META, GameSave.STORE_UPGRADES, GameSave.STORE_CLEARS,
-				GameSave.STORE_GREEN_MARKERS,
+				GameSave.STORE_RED_MARKERS, GameSave.STORE_GREEN_MARKERS,
 			];
+			const stores = wanted.filter((s) => db.objectStoreNames.contains(s));
+			if (stores.length === 0) return;
 			const tx = db.transaction(stores, 'readonly');
+			const has = (s: string) => stores.includes(s);
 
 			// state -> level
-			const stateRec = await GameSave.reqToPromise<any>(
-				tx.objectStore(GameSave.STORE_STATE).get(GameSave.KEY_STATE),
-			);
-			if (stateRec && Number.isFinite(stateRec.level) && stateRec.level >= 0) {
-				this.level = stateRec.level >>> 0;
+			if (has(GameSave.STORE_STATE)) {
+				const stateRec = await GameSave.reqToPromise<any>(
+					tx.objectStore(GameSave.STORE_STATE).get(GameSave.KEY_STATE),
+				);
+				if (stateRec && Number.isFinite(stateRec.level) && stateRec.level >= 0) {
+					this.level = stateRec.level >>> 0;
+				}
 			}
 
 			// meta -> coins
-			const metaRec = await GameSave.reqToPromise<any>(
-				tx.objectStore(GameSave.STORE_META).get(GameSave.KEY_META),
-			);
-			const loadedCoins = metaRec?.coins;
-			if (typeof loadedCoins === 'bigint' && loadedCoins >= 0n) {
-				this.coins = loadedCoins;
+			if (has(GameSave.STORE_META)) {
+				const metaRec = await GameSave.reqToPromise<any>(
+					tx.objectStore(GameSave.STORE_META).get(GameSave.KEY_META),
+				);
+				const loadedCoins = metaRec?.coins;
+				if (typeof loadedCoins === 'bigint' && loadedCoins >= 0n) {
+					this.coins = loadedCoins;
+				}
 			}
 
-			// histories: Map<level, string>
-			await GameSave.cursorEach(tx.objectStore(GameSave.STORE_HISTORIES), (key, value) => {
-				const k = Number(key);
-				if (Number.isFinite(k) && typeof value === 'string') {
-					this.histories.set(k, value);
-				}
-			});
+			// histories: Map<level, HistoryEntry>; Einträge im Alt-Format (reiner String) werden
+			// einmalig ins kürzbare Undo-Format konvertiert - nur im RAM, das Original bleibt in
+			// der DB liegen, bis das Spiel den Verlauf regulär neu speichert. Die dabei
+			// rekonstruierten roten Marker werden nach der Lese-Transaktion persistiert.
+			const migratedMarkers: Array<[number, number[]]> = [];
+			if (has(GameSave.STORE_HISTORIES)) {
+				await GameSave.cursorEach(tx.objectStore(GameSave.STORE_HISTORIES), (key, value) => {
+					const k = Number(key);
+					if (!Number.isFinite(k)) return;
+					if (typeof value === 'string' && value.length > 0) {
+						const migrated = migrateLegacyHistory(value);
+						if (migrated.raw.length > 0) {
+							this.histories.set(k, { raw: migrated.raw, undoPoints: migrated.undoPoints });
+						}
+						if (migrated.redMarkers.length > 0) migratedMarkers.push([k, migrated.redMarkers]);
+						return;
+					}
+					if (value && typeof value.raw === 'string' && value.raw.length > 0) {
+						const points = Number.isFinite(value.undoPoints) && value.undoPoints >= 0 ? value.undoPoints >>> 0 : 0;
+						this.histories.set(k, { raw: value.raw, undoPoints: points });
+					}
+				});
+			}
 
 			// best: Map<level, BestStat>
-			await GameSave.cursorEach(tx.objectStore(GameSave.STORE_BEST), (key, value) => {
-				const k = Number(key);
-				if (Number.isFinite(k) && value && Number.isFinite(value.moves) && Number.isFinite(value.totalMoves)) {
-					this.bests.set(k, { moves: value.moves >>> 0, totalMoves: value.totalMoves >>> 0 });
-				}
-			});
+			if (has(GameSave.STORE_BEST)) {
+				await GameSave.cursorEach(tx.objectStore(GameSave.STORE_BEST), (key, value) => {
+					const k = Number(key);
+					if (Number.isFinite(k) && value && Number.isFinite(value.moves) && Number.isFinite(value.totalMoves)) {
+						this.bests.set(k, { moves: value.moves >>> 0, totalMoves: value.totalMoves >>> 0 });
+					}
+				});
+			}
 
 			// upgrades: Map<upgradeId, level>
-			await GameSave.cursorEach(tx.objectStore(GameSave.STORE_UPGRADES), (key, value) => {
-				const k = String(key);
-				const n = Number(value);
-				if (k && Number.isFinite(n) && n >= 0) {
-					this.upgrades.set(k, n >>> 0);
-				}
-			});
+			if (has(GameSave.STORE_UPGRADES)) {
+				await GameSave.cursorEach(tx.objectStore(GameSave.STORE_UPGRADES), (key, value) => {
+					const k = String(key);
+					const n = Number(value);
+					if (k && Number.isFinite(n) && n >= 0) {
+						this.upgrades.set(k, n >>> 0);
+					}
+				});
+			}
 
 			// clears: Map<level, count>
-			await GameSave.cursorEach(tx.objectStore(GameSave.STORE_CLEARS), (key, value) => {
-				const k = Number(key);
-				const n = Number(value);
-				if (Number.isFinite(k) && Number.isFinite(n) && n >= 0) {
-					this.clears.set(k, n >>> 0);
-				}
-			});
+			if (has(GameSave.STORE_CLEARS)) {
+				await GameSave.cursorEach(tx.objectStore(GameSave.STORE_CLEARS), (key, value) => {
+					const k = Number(key);
+					const n = Number(value);
+					if (Number.isFinite(k) && Number.isFinite(n) && n >= 0) {
+						this.clears.set(k, n >>> 0);
+					}
+				});
+			}
 
-			// greenMarkers: Map<level, number[]> (gepackte (x<<16)|y-Keys)
-			await GameSave.cursorEach(tx.objectStore(GameSave.STORE_GREEN_MARKERS), (key, value) => {
-				const k = Number(key);
-				if (Number.isFinite(k) && Array.isArray(value)) {
-					const keys = value.filter((v) => typeof v === 'number' && Number.isFinite(v));
-					if (keys.length > 0) this.greenMarkers.set(k, keys);
-				}
-			});
+			// redMarkers/greenMarkers: Map<level, number[]> (gepackte (x<<16)|y-Keys)
+			if (has(GameSave.STORE_RED_MARKERS)) {
+				await GameSave.cursorEach(tx.objectStore(GameSave.STORE_RED_MARKERS), (key, value) => {
+					const k = Number(key);
+					if (Number.isFinite(k) && Array.isArray(value)) {
+						const keys = value.filter((v) => typeof v === 'number' && Number.isFinite(v));
+						if (keys.length > 0) this.redMarkers.set(k, keys);
+					}
+				});
+			}
+			if (has(GameSave.STORE_GREEN_MARKERS)) {
+				await GameSave.cursorEach(tx.objectStore(GameSave.STORE_GREEN_MARKERS), (key, value) => {
+					const k = Number(key);
+					if (Number.isFinite(k) && Array.isArray(value)) {
+						const keys = value.filter((v) => typeof v === 'number' && Number.isFinite(v));
+						if (keys.length > 0) this.greenMarkers.set(k, keys);
+					}
+				});
+			}
 
 			await GameSave.txDone(tx);
-		} catch {
-			// Cache bleibt leer / unvollständig
+
+			// Aus Alt-Spuren rekonstruierte rote Marker übernehmen und direkt persistieren
+			// (der Store ist für diese Level leer; vorhandene Einträge haben Vorrang).
+			for (const [k, keys] of migratedMarkers) {
+				if (this.redMarkers.has(k)) continue;
+				this.redMarkers.set(k, keys);
+				void this.persistKV(GameSave.STORE_RED_MARKERS, k, keys);
+			}
+		} catch (e) {
+			// Cache bleibt leer / unvollständig; sichtbar machen statt still schlucken,
+			// damit ein Ladefehler nicht wie ein verlorener Spielstand aussieht.
+			console.warn(`GameSave(${this.dbName}): Laden fehlgeschlagen`, e);
 		}
 	}
 
@@ -143,43 +212,62 @@ export class GameSave {
 	// ----- History (Endless) -----
 
 	getHistory(level: number): string {
-		return this.histories.get(level >>> 0) ?? '';
+		return this.histories.get(level >>> 0)?.raw ?? '';
 	}
 
-	setHistory(level: number, raw: string): void {
+	getHistoryUndoPoints(level: number): number {
+		return this.histories.get(level >>> 0)?.undoPoints ?? 0;
+	}
+
+	setHistory(level: number, raw: string, undoPoints = 0): void {
 		const key = level >>> 0;
 		if (raw.length === 0) {
 			if (!this.histories.has(key)) return;
 			this.histories.delete(key);
 			void this.persistKV(GameSave.STORE_HISTORIES, key, null);
 		} else {
-			if (this.histories.get(key) === raw) return;
-			this.histories.set(key, raw);
-			void this.persistKV(GameSave.STORE_HISTORIES, key, raw);
+			const points = undoPoints >= 0 ? undoPoints >>> 0 : 0;
+			const existing = this.histories.get(key);
+			if (existing && existing.raw === raw && existing.undoPoints === points) return;
+			const entry: HistoryEntry = { raw, undoPoints: points };
+			this.histories.set(key, entry);
+			void this.persistKV(GameSave.STORE_HISTORIES, key, entry);
 		}
 	}
 
-	// ----- Grüne Marker (Endless, frei per Rechtsklick gesetzt) -----
-	// Anders als die roten Marker (Zeichen 'M' im historyRaw, immer an der Spielerposition,
-	// daher beim Replay rekonstruierbar) sitzen grüne Marker an beliebigen Mauskoordinaten.
-	// Sie lassen sich nicht aus dem Eingabeverlauf ableiten und werden deshalb als
-	// explizite, pro Level gepackte Koordinatenliste gespeichert.
+	// ----- Marker (Endless) -----
+	// Rote Marker (an der Spielerposition getoggelt) wie grüne Marker (frei per Rechtsklick)
+	// werden als explizite, pro Level gepackte Koordinatenliste gespeichert. Sie liegen nicht
+	// in der Bewegungsspur: das echte Undo (Entf) kürzt die Spur, positionsgebundene
+	// Marker-Zeichen würden dabei auf falsche Replay-Positionen verrutschen.
+
+	getRedMarkers(level: number): number[] {
+		return this.redMarkers.get(level >>> 0) ?? [];
+	}
+
+	setRedMarkers(level: number, keys: number[]): void {
+		this.setMarkers(this.redMarkers, GameSave.STORE_RED_MARKERS, level, keys);
+	}
 
 	getGreenMarkers(level: number): number[] {
 		return this.greenMarkers.get(level >>> 0) ?? [];
 	}
 
 	setGreenMarkers(level: number, keys: number[]): void {
+		this.setMarkers(this.greenMarkers, GameSave.STORE_GREEN_MARKERS, level, keys);
+	}
+
+	private setMarkers(map: Map<number, number[]>, store: string, level: number, keys: number[]): void {
 		const key = level >>> 0;
 		if (keys.length === 0) {
-			if (!this.greenMarkers.has(key)) return;
-			this.greenMarkers.delete(key);
-			void this.persistKV(GameSave.STORE_GREEN_MARKERS, key, null);
+			if (!map.has(key)) return;
+			map.delete(key);
+			void this.persistKV(store, key, null);
 		} else {
 			// Kopie ablegen, damit spätere Mutationen am Aufrufer-Array den RAM-Cache nicht verändern.
 			const copy = keys.slice();
-			this.greenMarkers.set(key, copy);
-			void this.persistKV(GameSave.STORE_GREEN_MARKERS, key, copy);
+			map.set(key, copy);
+			void this.persistKV(store, key, copy);
 		}
 	}
 
@@ -322,6 +410,7 @@ export class GameSave {
 				if (!db.objectStoreNames.contains(GameSave.STORE_META)) db.createObjectStore(GameSave.STORE_META);
 				if (!db.objectStoreNames.contains(GameSave.STORE_UPGRADES)) db.createObjectStore(GameSave.STORE_UPGRADES);
 				if (!db.objectStoreNames.contains(GameSave.STORE_CLEARS)) db.createObjectStore(GameSave.STORE_CLEARS);
+				if (!db.objectStoreNames.contains(GameSave.STORE_RED_MARKERS)) db.createObjectStore(GameSave.STORE_RED_MARKERS);
 				if (!db.objectStoreNames.contains(GameSave.STORE_GREEN_MARKERS)) db.createObjectStore(GameSave.STORE_GREEN_MARKERS);
 			};
 			req.onsuccess = () => resolve(req.result);

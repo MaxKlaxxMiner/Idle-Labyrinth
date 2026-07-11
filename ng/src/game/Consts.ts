@@ -9,6 +9,8 @@ export const Consts = {
 	botManualCooldownMs: 500,
 	/** Intervall des Hintergrund-Tickers (ms), der die Idle-Simulation antreibt, solange der Tab versteckt ist (requestAnimationFrame pausiert dann). */
 	idleBackgroundTickMs: 1000,
+	/** Endless: alle N gelegte Vorwärtsschritte gibt es einen Undo-Punkt für echtes Rückgängig (Entf). */
+	endlessUndoPointEverySteps: 10,
 	/** Anzahl der Folge-Level, die vorab generiert und im RAM vorgehalten werden. */
 	labyPrefetchDepth: 16,
 	/** Obergrenze paralleler Generator-Worker; gewählt wird min(logische Cores - 1, Limit). */

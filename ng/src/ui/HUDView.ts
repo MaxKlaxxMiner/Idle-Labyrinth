@@ -5,6 +5,8 @@ export interface HUDState {
 	pixH?: number;
 	moves: number;
 	totalMoves: number;
+	/** Optional, nur im Endless: verfügbare Undo-Punkte für echtes Rückgängig (Entf). */
+	undoPoints?: number;
 	/** Optional, nur im Idle-Modus gesetzt. */
 	coins?: bigint;
 	/** Optional, erwartete Belohnung beim aktuellen Solve (nach Decay). */
@@ -45,7 +47,8 @@ export class HUDView {
 		} else if (state.spaceAction === 'active') {
 			spacePart = '  <span class="hud-bot hud-bot-on">AutoMover: Space (running)</span>';
 		}
-		const html = `Level: ${fmt(state.level)}${sizePart}${coinsPart}  Moves: ${fmt(state.moves)} / ${fmt(state.totalMoves)}  |  Move: WASD/↑↓←→  Reset: R${spacePart}  Center: Enter  Zoom: +/-, 0 fit`;
+		const undoPart = state.undoPoints !== undefined ? ` (${fmt(state.undoPoints)})` : '';
+		const html = `Level: ${fmt(state.level)}${sizePart}${coinsPart}  Moves: ${fmt(state.moves)} / ${fmt(state.totalMoves)}${undoPart}  |  Move: WASD/↑↓←→  Reset: R${spacePart}  Center: Enter  Zoom: +/-, 0 fit`;
 		if (html !== this.last) {
 			this.el.innerHTML = html;
 			this.last = html;

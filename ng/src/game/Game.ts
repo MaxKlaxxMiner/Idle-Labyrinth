@@ -37,6 +37,24 @@ function buildModeStrategy(mode: GameMode): GameModeStrategy {
 	return mode === 'endless' ? new EndlessMode() : new IdleMode();
 }
 
+type MoveDir = 'L' | 'R' | 'U' | 'D';
+
+// Gegenrichtung einer Bewegung (zum Abwickeln beim echten Undo).
+function oppositeDir(d: MoveDir): MoveDir {
+	if (d === 'L') return 'R';
+	if (d === 'R') return 'L';
+	if (d === 'U') return 'D';
+	return 'U';
+}
+
+// Zellen-Delta einer Richtung (halbe Schrittweite, ein Schritt geht 2 Zellen weit).
+function dirDelta(d: MoveDir): { dx: number; dy: number } {
+	if (d === 'L') return { dx: -1, dy: 0 };
+	if (d === 'R') return { dx: 1, dy: 0 };
+	if (d === 'U') return { dx: 0, dy: -1 };
+	return { dx: 0, dy: 1 };
+}
+
 export class Game implements BotHost, ModeHost, ShopHost {
 	private readonly bgCanvas: HTMLCanvasElement;
 	private readonly canvas: HTMLCanvasElement;
@@ -60,15 +78,26 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	readonly player = { x: 1, y: 1, r: 0.35 };
 	readonly goal = { x: 0, y: 0 };
 	moves = 0;       // "echte" Pfadlänge: zählt bei Undo wieder runter
-	totalMoves = 0;  // Gesamtschritte inkl. Rückwärts (ohne Marker), nur aufwärts
+	totalMoves = 0;  // Gesamtschritte inkl. Rückwärts (ohne Marker); nur echtes Undo (Entf) zählt runter
+	// Undo-Punktekonto (Endless): alle Consts.endlessUndoPointEverySteps Vorwärtsschritte
+	// gibt es einen Punkt; Entf verbraucht pro echtem Rückgängig-Schritt einen Punkt.
+	// Der Stand wird mit der History persistiert (aus der gekürzten Spur nicht rekonstruierbar).
+	undoPoints = 0;
+	private forwardSteps = 0;
 	history = new StringBuilder();
-	private historyRaw = new StringBuilder();   // wird nur im Endless-Modus benutzt (persistiert pro Level)
+	// Vollständige Bewegungsspur, nur im Endless-Modus geführt (persistiert pro Level).
+	// Großbuchstaben L/R/U/D = Vorwärtsschritt, Kleinbuchstaben l/r/u/d = Rückschritt, der den
+	// Vorwärtsschritt des großen Pendants zurücknahm (Backspace oder Gegenrichtung gelaufen).
+	// Jedes Zeichen ist damit lokal invertierbar; das echte Undo (Entf) kürzt die Spur einfach
+	// um ihr letztes Zeichen. Marker liegen bewusst nicht in der Spur (eigene Koordinatenliste).
+	private historyRaw = new StringBuilder();
 	private replaying = false;                  // aktiv während des Replays beim Level-Start (keine Persistierung)
 	private lastHistorySaveAt = 0;              // Throttle-Zeitstempel für historyRaw-Persistenz
+	// Rote Marker (per Space an der Spielerposition getoggelt); persistiert als Koordinatenliste
+	// (GameSave.setRedMarkers), nicht in der Bewegungsspur (siehe historyRaw-Kommentar).
 	private markers = new Set<number>();
-	// Frei per Rechtsklick gesetzte Marker (Endless): an beliebigen Zellen, auch auf Wänden.
-	// Im Unterschied zu markers (an der Spielerposition, persistiert via 'M' im historyRaw)
-	// werden diese als explizite Koordinaten gespeichert (GameSave.setGreenMarkers).
+	// Frei per Rechtsklick gesetzte Marker (Endless): an beliebigen Zellen, auch auf Wänden;
+	// persistiert als Koordinatenliste (GameSave.setGreenMarkers).
 	private greenMarkers = new Set<number>();
 
 	// Mouse-drag Panning (temporär, Kamera folgt erst nach Bewegung wieder)
@@ -322,10 +351,14 @@ export class Game implements BotHost, ModeHost, ShopHost {
 				}
 			}
 
-			// Undo: Backspace/Delete -> genau einen Schritt zurück (Autorepeat durch Keydown-Repeat)
+			// Undo: Backspace -> ein Schritt zurück (zählt als Zug); Entf im Endless -> echtes
+			// Rückgängig gegen Undo-Punkte. Im Idle wirkt Entf weiterhin wie Backspace.
 			let manualMove = false;
-			if (this.input.consumeKey('Backspace', 'Delete')) {
+			if (this.input.consumeKey('Backspace')) {
 				this.updatePlayer('B');
+				manualMove = true;
+			} else if (this.input.consumeKey('Delete')) {
+				this.updatePlayer(this.modeStrategy.id === 'endless' ? 'X' : 'B');
 				manualMove = true;
 			} else {
 				// Diskretes Vorwärts-Stepping: pro Tastendruck 1 Knoten (2 Tiles)
@@ -349,9 +382,10 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			if (this.input.consumeKey('r', 'R')) {
 				const atStart = this.player.x === 1 && this.player.y === 1;
 				if (!atStart && confirm('Level zurücksetzen und zum Start zurückkehren?')) {
-					// Endless: gespeicherten Verlauf und grüne Marker für dieses Level verwerfen
+					// Endless: gespeicherten Verlauf und Marker für dieses Level verwerfen
 					if (this.modeStrategy.usesHistory()) {
-						this.save?.setHistory(this.level, '');
+						this.save?.setHistory(this.level, '', 0);
+						this.save?.setRedMarkers(this.level, []);
 						this.save?.setGreenMarkers(this.level, []);
 					}
 					this.initLevel();
@@ -419,7 +453,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		// Während eines asynchronen Levelwechsels gehört historyRaw noch zum alten Level - nicht unter dem neuen Key speichern (die getrimmte Spur hat onLevelSolved bereits persistiert).
 		if (this.levelLoading) return;
 		if (!this.modeStrategy.usesHistory() || !this.save) return;
-		this.save.setHistory(this.level, this.historyRaw.toString());
+		this.save.setHistory(this.level, this.historyRaw.toString(), this.undoPoints);
 	}
 
 	private render() {
@@ -487,6 +521,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		let coins: bigint | undefined;
 		let coinsPending: bigint | undefined;
 		let spaceAction: 'mark' | 'available' | 'active' | undefined;
+		let undoPoints: number | undefined;
 		if (this.modeStrategy.id === 'idle') {
 			coins = this.save?.getCoins() ?? 0n;
 			const clears = this.save?.getLevelClears(displayLevel) ?? 0;
@@ -496,6 +531,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			}
 		} else {
 			spaceAction = 'mark';
+			undoPoints = this.undoPoints;
 		}
 		this.hud.set({
 			level: displayLevel + 1,
@@ -503,6 +539,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			pixH: this.laby.pixHeight,
 			moves: this.moves,
 			totalMoves: this.totalMoves,
+			undoPoints,
 			coins,
 			coinsPending,
 			spaceAction,
@@ -639,7 +676,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		return this.laby.isFree(mx, my);
 	}
 
-	private applyBacktrackHighlight(x: number, y: number, dx: number, dy: number, mode: 'backtrack' | 'deadend') {
+	private applyBacktrackHighlight(x: number, y: number, dx: number, dy: number, mode: 'backtrack' | 'deadend' | 'clear') {
 		this.levelView.markCell(x, y, mode);
 		if (dx !== 0 || dy !== 0) {
 			this.levelView.markCell(x + dx, y + dy, mode);
@@ -734,6 +771,8 @@ export class Game implements BotHost, ModeHost, ShopHost {
 
 		this.moves = 0;
 		this.totalMoves = 0;
+		this.undoPoints = 0;
+		this.forwardSteps = 0;
 		this.history = new StringBuilder();
 		this.historyRaw = new StringBuilder();
 		this.lastHistorySaveAt = 0;
@@ -761,6 +800,11 @@ export class Game implements BotHost, ModeHost, ShopHost {
 
 		// Endless / History-Modi: gespeicherten Verlauf einspielen
 		this.replayHistoryIfAny();
+		// Rote Marker erst nach dem Replay laden: gespeichert ist ihr Endzustand; würden sie
+		// vorher geladen, räumte das abgespielte Betreten der Zellen sie fälschlich wieder ab.
+		if (this.modeStrategy.usesHistory() && this.save) {
+			for (const k of this.save.getRedMarkers(this.level)) this.markers.add(k);
+		}
 	}
 
 	// Spielt einen gespeicherten historyRaw (Endless) Zeichen für Zeichen ab,
@@ -773,40 +817,87 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		try {
 			for (let i = 0; i < raw.length; i++) {
 				const c = raw.charAt(i);
-				if (c === 'L' || c === 'R' || c === 'U' || c === 'D' || c === 'B' || c === 'M') {
+				if (c === 'L' || c === 'R' || c === 'U' || c === 'D'
+					|| c === 'l' || c === 'r' || c === 'u' || c === 'd') {
 					this.updatePlayer(c);
 				}
 			}
 		} finally {
 			this.replaying = false;
 		}
-		// Nach Replay HistoryRaw mit dem geladenen Stand synchronisieren
+		// Nach Replay HistoryRaw mit dem geladenen Stand synchronisieren; der Undo-Punktestand
+		// kommt aus dem Save (das Abspielen vergibt Punkte, kennt aber die verbrauchten nicht).
 		this.historyRaw = new StringBuilder();
 		this.historyRaw.append(raw);
+		this.undoPoints = this.save.getHistoryUndoPoints(this.level);
 		this.camera.centerOnPlayerTile(this.player.x, this.player.y);
 		this.followPaused = false;
 		this.needsRender = true;
 	}
 
-	// Verarbeitet Spieler-relevante Eingaben (Rohcodes):
-	// 'L','R','U','D' = Bewegungen; 'B' = Backspace/Undo; 'M' = Marker toggle
-	updatePlayer(inputKey: 'L' | 'R' | 'U' | 'D' | 'B' | 'M') {
+	// Verarbeitet Spieler-relevante Eingaben:
+	// 'L','R','U','D' = Bewegungen; 'B' = Backspace/Undo (letzter Pfadschritt);
+	// 'l','r','u','d' = Rückschritt-Rohcodes aus der Spur (nur Replay);
+	// 'X' = Entf/echtes Undo (Endless, kürzt die Spur); 'M' = Marker toggle
+	updatePlayer(inputKey: 'L' | 'R' | 'U' | 'D' | 'B' | 'X' | 'M' | 'l' | 'r' | 'u' | 'd') {
 		this.followPaused = false;
 		if (inputKey === 'M') {
 			// Marker-Toggle zählt bewusst NICHT als Zug (weder moves noch totalMoves).
 			this.toggleMarkerAt(this.player.x, this.player.y);
-			this.recordRawInput('M');
 			return;
 		}
 
-		if (inputKey === 'B') {
+		if (inputKey === 'X') {
+			// Echtes Rückgängig (Endless): macht die letzte Bewegung ungeschehen - einen
+			// Vorwärtsschritt ebenso wie einen Rückschritt (Backspace/Gegenrichtung); Marker
+			// sind ausgenommen. Kostet einen Undo-Punkt; ohne Punkte keine Reaktion.
+			// Statt eines eigenen Spur-Zeichens wird die Spur um ihr letztes Zeichen gekürzt.
+			if (this.undoPoints <= 0) return;
+			if (this.historyRaw.length() === 0) return;
+			const z = this.historyRaw.lastChar();
+			const upper = z.toUpperCase() as MoveDir;
+			const wasForward = z === upper;
+			// Vorwärtsschritt -> zurücklaufen; Rückschritt -> wieder vorlaufen.
+			const moveDir = wasForward ? oppositeDir(upper) : upper;
+			const { dx, dy } = dirDelta(moveDir);
+			const prevX = this.player.x;
+			const prevY = this.player.y;
+			const nx = prevX + dx * 2;
+			const ny = prevY + dy * 2;
+			if (!this.canStepTo(prevX, prevY, nx, ny)) return;
+			this.historyRaw.removeLastChar();
+			this.undoPoints--;
+			this.totalMoves = Math.max(0, this.totalMoves - 1);
+			if (wasForward) {
+				// Gelegten Vorwärtsschritt austragen: Trail-Zellen zurück auf Grundfarbe.
+				this.applyBacktrackHighlight(prevX, prevY, dx, dy, 'clear');
+				this.moves = Math.max(0, this.moves - 1);
+				this.forwardSteps = Math.max(0, this.forwardSteps - 1);
+				this.history.removeLastChar();
+				this.bot.onBacktrack(nx, ny);
+			} else {
+				// Rückschritt austragen: wieder vorgehen, der Weg zählt erneut zum aktiven Pfad.
+				this.levelView.markCell(prevX + dx, prevY + dy, 'trail');
+				this.levelView.markCell(nx, ny, 'trail');
+				this.moves += 1;
+				this.history.append(upper);
+				this.bot.onForwardStep(nx, ny);
+			}
+			this.player.x = nx;
+			this.player.y = ny;
+			this.autoClearMarkerAt(nx, ny);
+			this.needsRender = true;
+			return;
+		}
+
+		if (inputKey === 'B' || inputKey === 'l' || inputKey === 'r' || inputKey === 'u' || inputKey === 'd') {
 			if (this.history.length() === 0) return;
-			const last = this.history.lastChar();
-			let dx = 0, dy = 0;
-			if (last === 'L') dx = 1;
-			else if (last === 'R') dx = -1;
-			else if (last === 'U') dy = 1;
-			else if (last === 'D') dy = -1;
+			// Zurückzunehmender Pfadschritt: bei 'B' der letzte, im Replay durch das Zeichen vorgegeben.
+			const h = (inputKey === 'B' ? this.history.lastChar() : inputKey.toUpperCase()) as MoveDir;
+			if (this.history.lastChar() !== h) return;
+			// Der Rückschritt läuft entgegen dem Pfadschritt.
+			const backDir = oppositeDir(h);
+			const { dx, dy } = dirDelta(backDir);
 			const nx = this.player.x + dx * 2;
 			const ny = this.player.y + dy * 2;
 			if (!this.canStepTo(this.player.x, this.player.y, nx, ny)) return;
@@ -818,7 +909,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			this.player.y = ny;
 			this.moves = Math.max(0, this.moves - 1);
 			this.totalMoves++;
-			this.recordRawInput('B');
+			this.recordRawInput(h.toLowerCase() as 'l' | 'r' | 'u' | 'd');
 			this.autoClearMarkerAt(this.player.x, this.player.y);
 			this.needsRender = true;
 			this.history.removeLastChar();
@@ -827,11 +918,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		}
 
 		// Bewegungen
-		let dx = 0, dy = 0;
-		if (inputKey === 'L') dx = -1;
-		else if (inputKey === 'R') dx = 1;
-		else if (inputKey === 'U') dy = -1;
-		else if (inputKey === 'D') dy = 1;
+		const { dx, dy } = dirDelta(inputKey);
 
 		const prevX = this.player.x;
 		const prevY = this.player.y;
@@ -859,22 +946,30 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			this.bot.onBacktrack(this.player.x, this.player.y);
 			this.moves = Math.max(0, this.moves - 1);
 			this.totalMoves++;
+			// In der Spur als Rückschritt des zurückgenommenen Pfadschritts kodieren.
+			this.recordRawInput(oppositeDir(inputKey).toLowerCase() as 'l' | 'r' | 'u' | 'd');
 		} else {
 			this.levelView.markCell(nx - cx, ny - cy, 'trail');
 			this.levelView.markCell(nx, ny, 'trail');
 			this.history.append(inputKey);
 			this.moves += 1;
 			this.totalMoves++;
+			this.recordRawInput(inputKey);
+			// Endless: gelegte Vorwärtsschritte füllen das Undo-Punktekonto; das echte Undo (Entf)
+			// nimmt den Fortschritt wieder zurück, Backspace/Gegenrichtung dagegen nicht.
+			if (this.modeStrategy.id === 'endless') {
+				this.forwardSteps++;
+				if (this.forwardSteps % Consts.endlessUndoPointEverySteps === 0) this.undoPoints++;
+			}
 			// Bot-Hook für Borderline-Filler (markiert beim Erreichen des Rands ungültige Bereiche)
 			this.bot.onForwardStep(nx, ny);
 		}
-		this.recordRawInput(inputKey);
 		this.autoClearMarkerAt(this.player.x, this.player.y);
 		this.needsRender = true;
 	}
 
 	// Hängt einen Roh-Input an die historyRaw an (nur in Modi mit History-Persistierung).
-	private recordRawInput(c: 'L' | 'R' | 'U' | 'D' | 'B' | 'M') {
+	private recordRawInput(c: 'L' | 'R' | 'U' | 'D' | 'l' | 'r' | 'u' | 'd') {
 		if (this.replaying) return;
 		if (!this.modeStrategy.usesHistory()) return;
 		this.historyRaw.append(c);
@@ -883,12 +978,24 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	private toggleMarkerAt(x: number, y: number) {
 		const k = ((x & 0xffff) << 16) | (y & 0xffff);
 		if (this.markers.has(k)) this.markers.delete(k); else this.markers.add(k);
+		this.persistRedMarkers();
 		this.needsRender = true;
 	}
 
 	private autoClearMarkerAt(x: number, y: number) {
 		const k = ((x & 0xffff) << 16) | (y & 0xffff);
-		if (this.markers.delete(k)) this.needsRender = true;
+		if (this.markers.delete(k)) {
+			this.persistRedMarkers();
+			this.needsRender = true;
+		}
+	}
+
+	// Rote Marker als Endzustand persistieren. Sie liegen nicht in der Bewegungsspur, weil das
+	// echte Undo (Entf) die Spur kürzt und positionsgebundene 'M'-Zeichen dabei verrutschen würden.
+	private persistRedMarkers() {
+		if (this.replaying || this.levelLoading) return;
+		if (!this.modeStrategy.usesHistory() || !this.save) return;
+		this.save.setRedMarkers(this.level, Array.from(this.markers));
 	}
 
 	private toggleGreenMarkerAt(x: number, y: number) {
