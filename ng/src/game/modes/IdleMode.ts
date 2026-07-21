@@ -23,4 +23,8 @@ export class IdleMode implements GameModeStrategy {
 	usesHistory(): boolean {
 		return false;
 	}
+
+	usesPrefetch(): boolean {
+		return true;
+	}
 }

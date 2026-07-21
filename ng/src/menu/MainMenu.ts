@@ -1,6 +1,6 @@
 import { MenuBackground } from "@/menu/MenuBackground";
 
-export type MenuAction = 'idle' | 'endless' | 'stats' | 'hard-reset';
+export type MenuAction = 'idle' | 'endless' | 'endurance' | 'stats' | 'hard-reset';
 
 export interface MainMenuOptions {
 	onSelect: (action: MenuAction) => void;
@@ -144,6 +144,7 @@ export class MainMenu {
                 <div class="menu-buttons">
                     <button class="menu-btn" data-act="idle">Idle Mode</button>
                     <button class="menu-btn" data-act="endless">Endless Mode</button>
+                    <button class="menu-btn" data-act="endurance">Endurance Mode</button>
                     <button class="menu-btn" data-act="stats">Stats</button>
                     <button class="menu-btn menu-btn-danger" data-act="hard-reset">Reset Idle</button>
                 </div>

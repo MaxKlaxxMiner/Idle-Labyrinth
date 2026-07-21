@@ -1,18 +1,20 @@
 /**
- * Persistenter Spielstand pro Slot (z. B. 'idle', 'endless'), backed by IndexedDB.
+ * Persistenter Spielstand pro Slot (z. B. 'idle', 'endless', 'endurance'), backed by IndexedDB.
  *
  * Stores (DB v5):
  * - state:      { save: { level: number } }              - aktueller Level-Stand
- * - histories:  { [level: number]: { raw, undoPoints } } - pro Level Bewegungsspur (Endless) und
- *                                                          verfügbare Undo-Punkte (nicht aus der
+ * - histories:  { [level: number]: { raw, undoPoints } } - pro Level Bewegungsspur (Endless/Endurance)
+ *                                                          und verfügbare Undo-Punkte (nicht aus der
  *                                                          kürzbaren Spur rekonstruierbar)
- * - best:       { [level: number]: { moves, totalMoves } } - Bestwerte pro gelöstem Level
- * - meta:       { coins: bigint }                        - Coin-Wallet (Idle)
+ * - best:       { [level: number]: { moves, totalMoves } } - Bestwerte pro gelöstem Level (Endless)
+ * - meta:       { coins: bigint, moves: number, totalMoves: number } - Coin-Wallet (Idle) sowie
+ *                                                          aufsummierte Pfadlängen und Gesamtschritte
+ *                                                          abgeschlossener Level (Endurance)
  * - upgrades:   { [upgradeId: string]: number }          - gekaufte Upgrade-Stufen (Idle)
  * - clears:     { [level: number]: number }              - Wiederholungs-Zähler pro Level (Idle)
- * - redMarkers: { [level: number]: number[] }            - pro Level an der Spielerposition gesetzte Marker (Endless),
+ * - redMarkers: { [level: number]: number[] }            - pro Level an der Spielerposition gesetzte Marker (Endless/Endurance),
  *                                                          je Marker als (x << 16) | y gepackt
- * - greenMarkers: { [level: number]: number[] }          - pro Level frei per Rechtsklick gesetzte Marker (Endless),
+ * - greenMarkers: { [level: number]: number[] }          - pro Level frei per Rechtsklick gesetzte Marker (Endless/Endurance),
  *                                                          je Marker als (x << 16) | y gepackt
  *
  * Alle Daten werden bei init() in den RAM geladen; Lese-Ops sind synchron,
@@ -54,6 +56,8 @@ export class GameSave {
 	private histories = new Map<number, HistoryEntry>();
 	private bests = new Map<number, BestStat>();
 	private coins = 0n;
+	private completedMoves = 0;
+	private completedTotalMoves = 0;
 	private upgrades = new Map<string, number>();
 	private clears = new Map<number, number>();
 	private redMarkers = new Map<number, number[]>();
@@ -92,7 +96,7 @@ export class GameSave {
 				}
 			}
 
-			// meta -> coins
+			// meta -> coins + Schritt-Summen abgeschlossener Level
 			if (has(GameSave.STORE_META)) {
 				const metaRec = await GameSave.reqToPromise<any>(
 					tx.objectStore(GameSave.STORE_META).get(GameSave.KEY_META),
@@ -100,6 +104,14 @@ export class GameSave {
 				const loadedCoins = metaRec?.coins;
 				if (typeof loadedCoins === 'bigint' && loadedCoins >= 0n) {
 					this.coins = loadedCoins;
+				}
+				const loadedMoves = metaRec?.moves;
+				if (typeof loadedMoves === 'number' && Number.isFinite(loadedMoves) && loadedMoves >= 0) {
+					this.completedMoves = Math.floor(loadedMoves);
+				}
+				const loadedTotal = metaRec?.totalMoves;
+				if (typeof loadedTotal === 'number' && Number.isFinite(loadedTotal) && loadedTotal >= 0) {
+					this.completedTotalMoves = Math.floor(loadedTotal);
 				}
 			}
 
@@ -318,6 +330,28 @@ export class GameSave {
 		this.setCoins(this.coins + delta);
 	}
 
+	// ----- Schritt-Summen abgeschlossener Level (Endurance) -----
+
+	/** Aufsummierte finale Pfadlängen (moves) aller abgeschlossenen Level. */
+	getCompletedMoves(): number {
+		return this.completedMoves;
+	}
+
+	/** Aufsummierte Gesamtschritte (totalMoves) aller abgeschlossenen Level. */
+	getCompletedTotalMoves(): number {
+		return this.completedTotalMoves;
+	}
+
+	/** Zählt Pfadlänge und Gesamtschritte eines abgeschlossenen Levels auf die Lebenszeit-Summen. */
+	addCompletedMoves(moves: number, totalMoves: number): void {
+		const m = Number.isFinite(moves) && moves > 0 ? Math.floor(moves) : 0;
+		const t = Number.isFinite(totalMoves) && totalMoves > 0 ? Math.floor(totalMoves) : 0;
+		if (m === 0 && t === 0) return;
+		this.completedMoves += m;
+		this.completedTotalMoves += t;
+		void this.persistMeta();
+	}
+
 	// ----- Upgrades (Idle) -----
 
 	getUpgrade(id: string): number {
@@ -378,7 +412,7 @@ export class GameSave {
 		try {
 			const db = await this.openDB(idb);
 			const tx = db.transaction([GameSave.STORE_META], 'readwrite');
-			tx.objectStore(GameSave.STORE_META).put({ coins: this.coins }, GameSave.KEY_META);
+			tx.objectStore(GameSave.STORE_META).put({ coins: this.coins, moves: this.completedMoves, totalMoves: this.completedTotalMoves }, GameSave.KEY_META);
 			await GameSave.txDone(tx);
 		} catch { /* ignorieren */ }
 	}

@@ -183,6 +183,17 @@ canvas#menu-bg {
 	0 0 1.125em rgba(74, 222, 128, 0.3);
 }
 
+.menu-btn[data-act="endurance"] {
+	border-color: rgba(251, 146, 60, 0.45);
+	color: #fb923c;
+}
+
+.menu-btn[data-act="endurance"]:hover {
+	border-color: rgba(251, 146, 60, 0.9);
+	box-shadow: 0 0 0 1px rgba(251, 146, 60, 0.25) inset,
+	0 0 1.125em rgba(251, 146, 60, 0.3);
+}
+
 .menu-btn[data-act="stats"] {
 	border-color: rgba(56, 189, 248, 0.45);
 	color: #38bdf8;

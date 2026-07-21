@@ -8,7 +8,7 @@ export interface ModeHost {
 	readonly level: number;
 	readonly moves: number;
 	readonly totalMoves: number;
-	/** Verfügbare Undo-Punkte für das echte Rückgängig (Entf, Endless). */
+	/** Verfügbare Undo-Punkte für das echte Rückgängig (Entf, Endless/Endurance). */
 	readonly undoPoints: number;
 	readonly save: GameSave | null;
 
@@ -17,19 +17,23 @@ export interface ModeHost {
 }
 
 /**
- * Eine Modus-Strategie kapselt das Verhalten, das sich zwischen Idle und Endless unterscheidet:
+ * Eine Modus-Strategie kapselt das Verhalten, das sich zwischen Idle, Endless und Endurance
+ * unterscheidet:
  * - wie das nächste Level gewählt wird (computeNextLevel)
  * - was beim Lösen passiert (onLevelSolved)
  * - ob der Bewegungsverlauf persistiert und beim Wiedereintritt replayed wird (usesHistory)
+ * - ob Folge-Level vorab in Workern generiert werden (usesPrefetch)
  *
  * Die Strategie ist stateless; sie liest und schreibt ausschließlich über den ModeHost.
  */
 export interface GameModeStrategy {
-	readonly id: 'idle' | 'endless';
+	readonly id: 'idle' | 'endless' | 'endurance';
 
 	computeNextLevel(currentLevel: number): number;
 
 	onLevelSolved(host: ModeHost): void;
 
 	usesHistory(): boolean;
+
+	usesPrefetch(): boolean;
 }

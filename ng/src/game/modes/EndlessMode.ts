@@ -28,6 +28,12 @@ export class EndlessMode implements GameModeStrategy {
 	usesHistory(): boolean {
 		return true;
 	}
+
+	// Kein Prefetch: die Sprünge entlang Consts.largeLevels würden die Vorab-Generierung
+	// riesiger Labyrinthe in Workern anstoßen und Speicher wie Worker blockieren.
+	usesPrefetch(): boolean {
+		return false;
+	}
 }
 
 /**

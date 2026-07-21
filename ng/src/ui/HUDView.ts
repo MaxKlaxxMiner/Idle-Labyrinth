@@ -5,7 +5,7 @@ export interface HUDState {
 	pixH?: number;
 	moves: number;
 	totalMoves: number;
-	/** Optional, nur im Endless: verfügbare Undo-Punkte für echtes Rückgängig (Entf). */
+	/** Optional, nur in History-Modi (Endless/Endurance): verfügbare Undo-Punkte für echtes Rückgängig (Entf). */
 	undoPoints?: number;
 	/** Optional, nur im Idle-Modus gesetzt. */
 	coins?: bigint;
@@ -13,7 +13,7 @@ export interface HUDState {
 	coinsPending?: bigint;
 	/**
 	 * Was Space im aktuellen Kontext tut.
-	 * - 'mark'      : Endless-Default (Marker setzen, neutrale Farbe)
+	 * - 'mark'      : Endless/Endurance-Default (Marker setzen, neutrale Farbe)
 	 * - 'available' : Idle, Bot gekauft aber inaktiv (gelb)
 	 * - 'active'    : Idle, Bot läuft (grün)
 	 * - undefined   : kein Space-Hinweis

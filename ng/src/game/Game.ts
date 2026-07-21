@@ -2,6 +2,7 @@ import { LabyCache } from "@/lib/LabyCache";
 import { GameSave } from "@/lib/GameSave";
 import { GameModeStrategy, ModeHost } from "@/game/modes/GameMode";
 import { EndlessMode } from "@/game/modes/EndlessMode";
+import { EnduranceMode } from "@/game/modes/EnduranceMode";
 import { IdleMode } from "@/game/modes/IdleMode";
 import { Bot, BotHost } from "@/game/Bot";
 import { ShopHost, ShopView } from "@/idle/ShopView";
@@ -17,7 +18,7 @@ import { UpgradeId } from "@/idle/Upgrades";
 import { Consts } from "@/game/Consts";
 import { calculateLevelReward } from "@/idle/Coins";
 
-export type GameMode = 'idle' | 'endless';
+export type GameMode = 'idle' | 'endless' | 'endurance';
 
 export interface GameOptions {
 	cache?: LabyCache | null;
@@ -34,7 +35,9 @@ export interface GameOptions {
 }
 
 function buildModeStrategy(mode: GameMode): GameModeStrategy {
-	return mode === 'endless' ? new EndlessMode() : new IdleMode();
+	if (mode === 'endless') return new EndlessMode();
+	if (mode === 'endurance') return new EnduranceMode();
+	return new IdleMode();
 }
 
 type MoveDir = 'L' | 'R' | 'U' | 'D';
@@ -79,13 +82,13 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	readonly goal = { x: 0, y: 0 };
 	moves = 0;       // "echte" Pfadlänge: zählt bei Undo wieder runter
 	totalMoves = 0;  // Gesamtschritte inkl. Rückwärts (ohne Marker); nur echtes Undo (Entf) zählt runter
-	// Undo-Punktekonto (Endless): alle Consts.endlessUndoPointEverySteps Vorwärtsschritte
+	// Undo-Punktekonto (Endless/Endurance): alle Consts.endlessUndoPointEverySteps Vorwärtsschritte
 	// gibt es einen Punkt; Entf verbraucht pro echtem Rückgängig-Schritt einen Punkt.
 	// Der Stand wird mit der History persistiert (aus der gekürzten Spur nicht rekonstruierbar).
 	undoPoints = 0;
 	private forwardSteps = 0;
 	history = new StringBuilder();
-	// Vollständige Bewegungsspur, nur im Endless-Modus geführt (persistiert pro Level).
+	// Vollständige Bewegungsspur, nur in History-Modi (Endless/Endurance) geführt (persistiert pro Level).
 	// Großbuchstaben L/R/U/D = Vorwärtsschritt, Kleinbuchstaben l/r/u/d = Rückschritt, der den
 	// Vorwärtsschritt des großen Pendants zurücknahm (Backspace oder Gegenrichtung gelaufen).
 	// Jedes Zeichen ist damit lokal invertierbar; das echte Undo (Entf) kürzt die Spur einfach
@@ -96,8 +99,8 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	// Rote Marker (per Space an der Spielerposition getoggelt); persistiert als Koordinatenliste
 	// (GameSave.setRedMarkers), nicht in der Bewegungsspur (siehe historyRaw-Kommentar).
 	private markers = new Set<number>();
-	// Frei per Rechtsklick gesetzte Marker (Endless): an beliebigen Zellen, auch auf Wänden;
-	// persistiert als Koordinatenliste (GameSave.setGreenMarkers).
+	// Frei per Rechtsklick gesetzte Marker (Endless/Endurance): an beliebigen Zellen, auch auf
+	// Wänden; persistiert als Koordinatenliste (GameSave.setGreenMarkers).
 	private greenMarkers = new Set<number>();
 
 	// Mouse-drag Panning (temporär, Kamera folgt erst nach Bewegung wieder)
@@ -179,9 +182,11 @@ export class Game implements BotHost, ModeHost, ShopHost {
 		this.cache = opts?.cache ?? null;
 		this.save = opts?.save ?? null;
 		this.modeStrategy = buildModeStrategy(opts?.mode ?? 'idle');
-		// Prefetch nur im Idle-Modus: Endless springt entlang Consts.largeLevels, dort
-		// würde die Vorab-Generierung riesiger Labyrinthe Worker und Speicher blockieren.
-		this.prefetch = this.modeStrategy.id === 'idle'
+		// Prefetch nur im Idle-Modus (Level werden dort teils sehr schnell durchgespielt).
+		// Endless springt entlang Consts.largeLevels (Vorab-Generierung riesiger Labyrinthe
+		// würde Worker und Speicher blockieren), Endurance wird von Hand gespielt - beiden
+		// genügt die Generierung beim Levelwechsel.
+		this.prefetch = this.modeStrategy.usesPrefetch()
 			? new LabyPrefetch(Consts.labyPrefetchDepth, Consts.labyPrefetchMaxWorkers)
 			: null;
 		this.onExit = opts?.onExit ?? null;
@@ -281,7 +286,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 	dispose() {
 		if (this.disposed) return;
 		this.disposed = true;
-		// Endless: ungesicherte history-Änderungen noch fest persistieren
+		// History-Modi: ungesicherte history-Änderungen noch fest persistieren
 		this.persistHistoryNow();
 		this.stop();
 		window.removeEventListener('resize', this.onResize);
@@ -351,14 +356,15 @@ export class Game implements BotHost, ModeHost, ShopHost {
 				}
 			}
 
-			// Undo: Backspace -> ein Schritt zurück (zählt als Zug); Entf im Endless -> echtes
-			// Rückgängig gegen Undo-Punkte. Im Idle wirkt Entf weiterhin wie Backspace.
+			// Undo: Backspace -> ein Schritt zurück (zählt als Zug); Entf in History-Modi
+			// (Endless/Endurance) -> echtes Rückgängig gegen Undo-Punkte. Im Idle wirkt Entf
+			// wie Backspace.
 			let manualMove = false;
 			if (this.input.consumeKey('Backspace')) {
 				this.updatePlayer('B');
 				manualMove = true;
 			} else if (this.input.consumeKey('Delete')) {
-				this.updatePlayer(this.modeStrategy.id === 'endless' ? 'X' : 'B');
+				this.updatePlayer(this.modeStrategy.usesHistory() ? 'X' : 'B');
 				manualMove = true;
 			} else {
 				// Diskretes Vorwärts-Stepping: pro Tastendruck 1 Knoten (2 Tiles)
@@ -382,7 +388,7 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			if (this.input.consumeKey('r', 'R')) {
 				const atStart = this.player.x === 1 && this.player.y === 1;
 				if (!atStart && confirm('Level zurücksetzen und zum Start zurückkehren?')) {
-					// Endless: gespeicherten Verlauf und Marker für dieses Level verwerfen
+					// History-Modi: gespeicherten Verlauf und Marker für dieses Level verwerfen
 					if (this.modeStrategy.usesHistory()) {
 						this.save?.setHistory(this.level, '', 0);
 						this.save?.setRedMarkers(this.level, []);
@@ -631,10 +637,11 @@ export class Game implements BotHost, ModeHost, ShopHost {
 
 	// Rechtsklick: grünen Marker an der geklickten Zelle setzen/entfernen.
 	// preventDefault unterdrückt das Browser-Kontextmenü über dem Spielfeld in jedem Modus;
-	// gesetzt werden grüne Marker aber nur im Endless (Persistierung pro Level).
+	// gesetzt werden grüne Marker aber nur in History-Modi (Endless/Endurance,
+	// Persistierung pro Level).
 	private onContextMenu(e: MouseEvent) {
 		e.preventDefault();
-		if (this.modeStrategy.id !== 'endless') return;
+		if (!this.modeStrategy.usesHistory()) return;
 		// Während eines asynchronen Levelwechsels gehört this.level schon zum neuen Level,
 		// die sichtbare Geometrie aber noch zum alten -> keine Marker setzen.
 		if (this.levelLoading || !this.hasLevel) return;
@@ -955,9 +962,10 @@ export class Game implements BotHost, ModeHost, ShopHost {
 			this.moves += 1;
 			this.totalMoves++;
 			this.recordRawInput(inputKey);
-			// Endless: gelegte Vorwärtsschritte füllen das Undo-Punktekonto; das echte Undo (Entf)
-			// nimmt den Fortschritt wieder zurück, Backspace/Gegenrichtung dagegen nicht.
-			if (this.modeStrategy.id === 'endless') {
+			// History-Modi (Endless/Endurance): gelegte Vorwärtsschritte füllen das Undo-Punktekonto;
+			// das echte Undo (Entf) nimmt den Fortschritt wieder zurück, Backspace/Gegenrichtung
+			// dagegen nicht.
+			if (this.modeStrategy.usesHistory()) {
 				this.forwardSteps++;
 				if (this.forwardSteps % Consts.endlessUndoPointEverySteps === 0) this.undoPoints++;
 			}

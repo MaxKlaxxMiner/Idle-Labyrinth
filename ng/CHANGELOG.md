@@ -5,6 +5,7 @@ Dieses Projekt folgt dem Format von "Keep a Changelog" und SemVer (siehe VERSION
 ## [Unreleased]
 - Build: Wechsel von Webpack 5 auf Vite 6 (Dev-Server, Build, Preview).
 - Spielmodi: Idle und Endless über Modus-Strategie (`src/game/modes/`); Hauptmenü mit Modus-Auswahl, Statistik-Ansicht und Hard-Reset (`src/menu/`).
+- Endurance-Modus: Spielweise wie Endless (Verlauf mit Resume, Undo-Punkte, Marker), aber Level einzeln (+1 statt Sprüngen); beim Lösen wird der Level-Fortschritt verworfen (keine Bestwerte-Liste), die Statistik zeigt nur das aktuell erreichte Level plus aufsummierte Schritte abgeschlossener Level (Pfadlänge / Gesamtschritte); eigener Save-Slot und Labyrinth-Cache (`endurance`).
 - Ökonomie: Coin-Belohnung mit Wiederholungs-Decay als `bigint` (`src/idle/Coins.ts`).
 - Upgrade-Shop: Registry und Kostenformel (`src/idle/Upgrades.ts`), Overlay mit klassenbasierter Sichtbarkeit und Preis-Sortierung (`src/idle/ShopView.ts`); Shop ab Level 5.
 - AutoMover: deterministischer, geseedter Bot (`src/game/Bot.ts`) mit Stufen 1-3 (random/smart/smarter) sowie AutoMover-Speed.
